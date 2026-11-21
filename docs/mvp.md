@@ -88,7 +88,7 @@ Design rules:
 |---|---|
 | M0 ✅ | **Player spike**: mpv with JavaFX overlay and fade. Decision: libmpv (see results below). |
 | M1 ✅ | Monorepo skeleton, Docker Compose (PostgreSQL, Keycloak, SeaweedFS), build. |
-| M2 | Library: upload through the web, S3 storage, listing. |
+| M2 ✅ | Library: upload through the web, S3 storage, listing, preview, rename, delete; web login through Keycloak. |
 | M3 | Protocol, player connection, and device approval. |
 | M4 | Event with items, pre-cache on the player. |
 | M5 | Live control, playback, rest screen, fade. **MVP complete.** |

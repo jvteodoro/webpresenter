@@ -23,6 +23,7 @@ Documentation: [`docs/business.md`](docs/business.md), [`docs/architecture.md`](
 - JDK 25
 - Node.js 24+ and npm
 - Docker with Compose
+- ffmpeg/ffprobe (the server inspects uploads with ffprobe; the server tests generate media with ffmpeg)
 - libmpv (for the player): `media-video/mpv` with the `libmpv` USE flag on Gentoo,
   `libmpv2` on Debian/Ubuntu
 

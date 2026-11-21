@@ -1,0 +1,26 @@
+<mat-toolbar class="toolbar">
+  <span class="brand">webpresenter</span>
+  <nav class="nav">
+    <a mat-button routerLink="/biblioteca" routerLinkActive="active">
+      <mat-icon>video_library</mat-icon>
+      Biblioteca
+    </a>
+  </nav>
+  <span class="spacer"></span>
+  @if (currentUser.user(); as user) {
+    <button mat-button [matMenuTriggerFor]="userMenu" class="user">
+      <mat-icon>account_circle</mat-icon>
+      {{ currentUser.displayName() }}
+    </button>
+    <mat-menu #userMenu="matMenu" xPosition="before">
+      <div class="roles" mat-menu-item disabled>{{ user.roles.join(', ') }}</div>
+      <button mat-menu-item (click)="currentUser.logout()">
+        <mat-icon>logout</mat-icon>
+        Sair
+      </button>
+    </mat-menu>
+  }
+</mat-toolbar>
+<main class="content">
+  <router-outlet />
+</main>

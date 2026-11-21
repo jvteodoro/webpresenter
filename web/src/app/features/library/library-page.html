@@ -1,0 +1,49 @@
+<header class="page-header">
+  <h1>Biblioteca de mídia</h1>
+</header>
+
+@if (currentUser.canManageLibrary()) {
+  <section class="card">
+    <app-media-upload (uploaded)="onUploaded($event)" />
+  </section>
+}
+
+<section class="card">
+  <div class="filters">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search">
+      <mat-icon matPrefix>search</mat-icon>
+      <mat-label>Buscar</mat-label>
+      <input matInput [ngModel]="search()" (ngModelChange)="search.set($event)" />
+    </mat-form-field>
+    <mat-button-toggle-group [value]="kind()" (change)="kind.set($event.value)" hideSingleSelectionIndicator>
+      <mat-button-toggle value="ALL">Todas</mat-button-toggle>
+      <mat-button-toggle value="VIDEO">Vídeos</mat-button-toggle>
+      <mat-button-toggle value="AUDIO">Áudios</mat-button-toggle>
+      <mat-button-toggle value="IMAGE">Imagens</mat-button-toggle>
+    </mat-button-toggle-group>
+  </div>
+
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" />
+  }
+
+  @if (loadError()) {
+    <p class="empty error">Não foi possível carregar a biblioteca. <a href="" (click)="$event.preventDefault(); reload()">Tentar novamente</a></p>
+  } @else if (!loading() && visible().length === 0) {
+    <p class="empty">
+      @if (assets().length === 0) {
+        Nenhuma mídia na biblioteca ainda.
+      } @else {
+        Nenhuma mídia encontrada com esses filtros.
+      }
+    </p>
+  } @else {
+    <app-media-table
+      [items]="visible()"
+      [canManage]="currentUser.canManageLibrary()"
+      (preview)="openPreview($event)"
+      (rename)="openRename($event)"
+      (remove)="confirmDelete($event)"
+    />
+  }
+</section>

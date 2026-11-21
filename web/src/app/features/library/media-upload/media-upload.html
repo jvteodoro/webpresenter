@@ -1,0 +1,43 @@
+<div
+  class="drop-zone"
+  [class.dragging]="dragging()"
+  (dragover)="onDragOver($event)"
+  (dragleave)="dragging.set(false)"
+  (drop)="onDrop($event)"
+>
+  <mat-icon class="drop-icon">cloud_upload</mat-icon>
+  <p>Arraste vídeos, áudios ou imagens para cá</p>
+  <button mat-stroked-button type="button" (click)="picker.click()">Escolher arquivos</button>
+  <input #picker type="file" multiple hidden accept="video/*,audio/*,image/*" (change)="onFilesSelected(picker)" />
+</div>
+
+@if (items().length > 0) {
+  <ul class="queue">
+    @for (item of items(); track item.id) {
+      <li class="queue-item" [class]="item.status">
+        <div class="queue-row">
+          <span class="name">{{ item.file.name }}</span>
+          <span class="size">{{ item.file.size | fileSize }}</span>
+          <span class="state">
+            @switch (item.status) {
+              @case ('waiting') { Na fila }
+              @case ('uploading') { {{ item.percent }}% }
+              @case ('processing') { Processando… }
+              @case ('done') { <mat-icon>check_circle</mat-icon> }
+              @case ('error') { <mat-icon>error</mat-icon> }
+            }
+          </span>
+        </div>
+        @if (item.status === 'uploading' || item.status === 'processing') {
+          <mat-progress-bar [mode]="item.status === 'processing' ? 'indeterminate' : 'determinate'" [value]="item.percent" />
+        }
+        @if (item.error) {
+          <p class="error-text">{{ item.error }}</p>
+        }
+      </li>
+    }
+  </ul>
+  @if (hasFinished()) {
+    <button mat-button type="button" (click)="clearFinished()">Limpar concluídos</button>
+  }
+}

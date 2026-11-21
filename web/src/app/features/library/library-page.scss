@@ -1,0 +1,40 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.page-header h1 {
+  margin: 0;
+  font: var(--mat-sys-headline-small);
+}
+
+.card {
+  padding: 1rem;
+  border-radius: var(--mat-sys-corner-large);
+  background: var(--mat-sys-surface-container-low);
+  border: 1px solid var(--mat-sys-outline-variant);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.search {
+  flex: 1;
+  min-width: 14rem;
+}
+
+.empty {
+  margin: 1.5rem 0;
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.error {
+  color: var(--mat-sys-error);
+}

@@ -1,12 +1,9 @@
 import { Component } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Shell } from './layout/shell/shell';
 
 @Component({
-  imports: [RouterOutlet],
   selector: 'app-root',
-  styleUrl: './app.scss',
-  templateUrl: './app.html',
+  imports: [Shell],
+  template: '<app-shell />',
 })
-export class App {
-  protected readonly title = 'webpresenter';
-}
+export class App {}
