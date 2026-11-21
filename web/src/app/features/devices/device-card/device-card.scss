@@ -1,0 +1,129 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 1rem;
+  border-radius: var(--mat-sys-corner-large);
+  background: var(--mat-sys-surface-container-low);
+  border: 1px solid var(--mat-sys-outline-variant);
+
+  &.pending {
+    border-color: var(--mat-sys-tertiary);
+    background: var(--mat-sys-tertiary-container);
+    color: var(--mat-sys-on-tertiary-container);
+  }
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.icon {
+  color: var(--mat-sys-primary);
+}
+
+.titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font: var(--mat-sys-title-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  opacity: 0.8;
+
+  .dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: var(--mat-sys-outline);
+  }
+
+  &.online .dot {
+    background: #2e9d4f;
+    box-shadow: 0 0 0 3px color-mix(in srgb, #2e9d4f 25%, transparent);
+  }
+}
+
+.pairing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0;
+
+  .label,
+  .hint {
+    font-size: 0.8rem;
+  }
+
+  .code {
+    font-family: ui-monospace, monospace;
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+  }
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+  font-size: 0.9rem;
+
+  dt {
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  dd {
+    margin: 0;
+  }
+}
+
+.cache {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+
+  .ok {
+    font-size: 1.1rem;
+    width: 1.1rem;
+    height: 1.1rem;
+    color: #2e9d4f;
+  }
+
+  mat-progress-bar {
+    flex-basis: 100%;
+  }
+}
+
+.actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: auto;
+}
+
+.danger {
+  color: var(--mat-sys-error);
+}

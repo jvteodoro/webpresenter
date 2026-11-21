@@ -1,0 +1,43 @@
+<header class="page-header">
+  <h1>Dispositivos</h1>
+  <p class="lead">Players conectados ao servidor. Um player novo aparece aqui com o código exibido no telão.</p>
+</header>
+
+@if (!currentUser.canManageDevices() && currentUser.user()) {
+  <p class="empty">Apenas administradores e técnicos de áudio e vídeo gerenciam dispositivos.</p>
+} @else if (devices() === null && !loadError()) {
+  <mat-progress-bar mode="indeterminate" />
+} @else {
+  @if (loadError()) {
+    <p class="error">Sem resposta do servidor; tentando novamente…</p>
+  }
+
+  @if (pending().length > 0) {
+    <section>
+      <h2 class="section-title">
+        <mat-icon>notifications_active</mat-icon>
+        Aguardando aprovação
+      </h2>
+      <div class="grid">
+        @for (d of pending(); track d.id) {
+          <app-device-card [device]="d" (approve)="openApprove($event)" (remove)="confirmRemove($event)" />
+        }
+      </div>
+    </section>
+  }
+
+  <section>
+    <h2 class="section-title">Players aprovados</h2>
+    @if (approved().length === 0) {
+      <p class="empty">
+        Nenhum player aprovado ainda. Instale e abra o player no computador ligado ao telão, apontando para este servidor.
+      </p>
+    } @else {
+      <div class="grid">
+        @for (d of approved(); track d.id) {
+          <app-device-card [device]="d" (configure)="openSettings($event)" (remove)="confirmRemove($event)" />
+        }
+      </div>
+    }
+  </section>
+}

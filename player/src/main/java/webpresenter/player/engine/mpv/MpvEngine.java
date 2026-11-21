@@ -66,7 +66,7 @@ public final class MpvEngine implements VideoEngine {
         this.width = width;
         this.height = height;
         this.stride = alignUp(width * 4L, 64);
-        this.pixelBuffers = new PixelBuffer[BUFFERS];
+        this.pixelBuffers = (PixelBuffer<ByteBuffer>[]) new PixelBuffer<?>[BUFFERS];
 
         try {
             Mpv.forceNumericCLocale();
@@ -135,7 +135,8 @@ public final class MpvEngine implements VideoEngine {
     }
 
     @Override
-    public void play(Path media) {
+    public void play(Path media, boolean loop) {
+        setProperty("loop-file", loop ? "inf" : "no");
         command("loadfile", media.toAbsolutePath().toString(), "replace");
     }
 

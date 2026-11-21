@@ -1,0 +1,63 @@
+@let d = device();
+<article class="card" [class.pending]="d.status === 'PENDING'" [attr.aria-label]="d.name">
+  <header class="head">
+    <mat-icon class="icon">{{ d.status === 'PENDING' ? 'device_unknown' : 'connected_tv' }}</mat-icon>
+    <div class="titles">
+      <h2 class="name">{{ d.name }}</h2>
+      <div class="sub">{{ d.hostname }}@if (d.playerVersion) { · versão {{ d.playerVersion }} }</div>
+    </div>
+    <span class="presence" [class.online]="d.online">
+      <span class="dot"></span>
+      {{ d.online ? 'Online' : 'Offline' }}
+    </span>
+  </header>
+
+  @if (d.status === 'PENDING') {
+    <div class="pairing">
+      <span class="label">Código exibido no telão</span>
+      <span class="code">{{ d.pairingCode }}</span>
+      @if (!d.online) {
+        <span class="hint">Ligue o player para poder aprová-lo.</span>
+      }
+    </div>
+  } @else {
+    <dl class="facts">
+      <dt>Tela de saída</dt>
+      <dd>{{ displayText() }}</dd>
+      <dt>Tela de descanso</dt>
+      <dd>{{ d.restScreen?.title ?? 'Tela preta' }}</dd>
+      @if (d.online && d.cacheStatus && d.cacheStatus.itemsTotal > 0) {
+        <dt>Mídia no player</dt>
+        <dd class="cache">
+          @if (cacheReady()) {
+            <mat-icon class="ok">check_circle</mat-icon> Pronta
+          } @else {
+            Baixando {{ d.cacheStatus.bytesReady | fileSize }} de {{ d.cacheStatus.bytesTotal | fileSize }}
+            <mat-progress-bar mode="determinate" [value]="cachePercent() ?? 0" />
+          }
+        </dd>
+      }
+      @if (!d.online) {
+        <dt>Visto por último</dt>
+        <dd>{{ d.lastSeenAt | date: 'short' }}</dd>
+      }
+    </dl>
+  }
+
+  <footer class="actions">
+    @if (d.status === 'PENDING') {
+      <button mat-flat-button [disabled]="!d.online" (click)="approve.emit(d)">
+        <mat-icon>check</mat-icon>
+        Aprovar
+      </button>
+    } @else {
+      <button mat-stroked-button (click)="configure.emit(d)">
+        <mat-icon>tune</mat-icon>
+        Configurar
+      </button>
+    }
+    <button mat-button class="danger" (click)="remove.emit(d)">
+      {{ d.status === 'PENDING' ? 'Recusar' : 'Remover' }}
+    </button>
+  </footer>
+</article>

@@ -1,10 +1,16 @@
 <mat-toolbar class="toolbar">
   <span class="brand">webpresenter</span>
   <nav class="nav">
-    <a mat-button routerLink="/biblioteca" routerLinkActive="active">
+    <a mat-button routerLink="/biblioteca" routerLinkActive="active" aria-label="Biblioteca">
       <mat-icon>video_library</mat-icon>
-      Biblioteca
+      <span class="nav-label">Biblioteca</span>
     </a>
+    @if (currentUser.canManageDevices()) {
+      <a mat-button routerLink="/dispositivos" routerLinkActive="active" aria-label="Dispositivos">
+        <mat-icon>connected_tv</mat-icon>
+        <span class="nav-label">Dispositivos</span>
+      </a>
+    }
   </nav>
   <span class="spacer"></span>
   @if (currentUser.user()) {

@@ -14,8 +14,13 @@ public interface VideoEngine extends AutoCloseable {
     /** Node displaying the video frames. */
     Node view();
 
-    /** Loads and starts playing a media file (video or audio). */
-    void play(Path media);
+    /** Loads and starts playing a media file (video or audio) once. */
+    default void play(Path media) {
+        play(media, false);
+    }
+
+    /** Loads and starts playing a media file, optionally looping it until stopped. */
+    void play(Path media, boolean loop);
 
     void stop();
 

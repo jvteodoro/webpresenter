@@ -4,11 +4,13 @@ spring-modulith = "2.1.2"
 javafx = "27.0.1"
 junit = "6.1.2"
 awssdk = "2.58.0"
+jackson = "3.1.7"
 
 [libraries]
 spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
 spring-modulith-bom = { module = "org.springframework.modulith:spring-modulith-bom", version.ref = "spring-modulith" }
 awssdk-bom = { module = "software.amazon.awssdk:bom", version.ref = "awssdk" }
+jackson-bom = { module = "tools.jackson:jackson-bom", version.ref = "jackson" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 
 [plugins]

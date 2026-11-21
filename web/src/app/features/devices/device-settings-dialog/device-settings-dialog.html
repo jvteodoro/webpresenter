@@ -1,0 +1,37 @@
+<h2 mat-dialog-title>Configurar {{ device.name }}</h2>
+<form (ngSubmit)="save()">
+  <mat-dialog-content>
+    <div class="form">
+      <mat-form-field appearance="outline">
+        <mat-label>Nome</mat-label>
+        <input matInput name="name" [ngModel]="name()" (ngModelChange)="name.set($event)" maxlength="100" required />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Tela de saída</mat-label>
+        <mat-select name="display" [value]="displayIndex()" (valueChange)="displayIndex.set($event)">
+          @for (screen of device.displays; track screen.index) {
+            <mat-option [value]="screen.index">{{ displayLabel(screen) }}</mat-option>
+          } @empty {
+            <mat-option [value]="0">Tela 1</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Tela de descanso</mat-label>
+        <mat-select name="rest" [value]="restMediaId()" (valueChange)="restMediaId.set($event)">
+          <mat-option [value]="null">Tela preta</mat-option>
+          @for (m of restOptions(); track m.id) {
+            <mat-option [value]="m.id">{{ m.title }} ({{ m.kind === 'VIDEO' ? 'vídeo' : 'imagem' }})</mat-option>
+          }
+        </mat-select>
+        <mat-hint>Imagem ou vídeo exibido quando nada está sendo apresentado</mat-hint>
+      </mat-form-field>
+    </div>
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" mat-dialog-close>Cancelar</button>
+    <button mat-flat-button type="submit" [disabled]="!name().trim()">Salvar</button>
+  </mat-dialog-actions>
+</form>

@@ -1,4 +1,4 @@
-package webpresenter.server.library;
+package webpresenter.server;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -8,26 +8,26 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assumptions;
 
 /** Generates tiny media files with ffmpeg; tests using it are skipped when ffmpeg is missing. */
-final class TestMedia {
+public final class TestMedia {
 
     private TestMedia() {}
 
-    static void assumeFfmpeg() {
+    public static void assumeFfmpeg() {
         Assumptions.assumeTrue(runs("ffmpeg", "-version") && runs("ffprobe", "-version"),
                 "ffmpeg/ffprobe not installed");
     }
 
-    static Path video(Path dir) {
+    public static Path video(Path dir) {
         return ffmpeg(dir.resolve("clip.mp4"), "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=25",
                 "-f", "lavfi", "-i", "sine=frequency=440", "-t", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-shortest");
     }
 
-    static Path audio(Path dir) {
+    public static Path audio(Path dir) {
         return ffmpeg(dir.resolve("tone.m4a"), "-f", "lavfi", "-i", "sine=frequency=330", "-t", "3", "-c:a", "aac");
     }
 
-    static Path image(Path dir) {
+    public static Path image(Path dir) {
         return ffmpeg(dir.resolve("frame.png"), "-f", "lavfi", "-i", "testsrc2=size=640x360", "-frames:v", "1");
     }
 

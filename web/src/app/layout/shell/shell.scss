@@ -43,8 +43,18 @@
     padding: 0 0.5rem;
   }
 
-  // Keep only the icon; the name is shown inside the menu.
-  .user-name {
+  // Keep only the icons; the user's name is shown inside the menu.
+  .user-name,
+  .nav-label {
+    display: none;
+  }
+
+  .nav a {
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  .brand {
     display: none;
   }
 

@@ -26,3 +26,8 @@ application {
     mainClass = "webpresenter.player.Launcher"
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
 }
+
+tasks.withType<JavaCompile>().configureEach {
+    // The mpv bindings use the FFM API's restricted methods on purpose (native access is enabled at runtime).
+    options.compilerArgs.add("-Xlint:-restricted")
+}

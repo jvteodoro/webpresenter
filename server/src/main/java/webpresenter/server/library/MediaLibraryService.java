@@ -15,10 +15,12 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import webpresenter.server.storage.MediaStore;
@@ -26,7 +28,7 @@ import webpresenter.server.storage.PresignedUrl;
 
 @Service
 @EnableConfigurationProperties(LibraryProperties.class)
-class MediaLibraryService {
+class MediaLibraryService implements MediaCatalog {
 
     private static final Logger log = LoggerFactory.getLogger(MediaLibraryService.class);
 
@@ -34,14 +36,16 @@ class MediaLibraryService {
     private final MediaStore store;
     private final MediaProbe probe;
     private final LibraryProperties properties;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     MediaLibraryService(MediaAssetRepository repository, MediaStore store, MediaProbe probe,
-            LibraryProperties properties) {
+            LibraryProperties properties, ApplicationEventPublisher events) {
         this.repository = repository;
         this.store = store;
         this.probe = probe;
         this.properties = properties;
+        this.events = events;
         this.clock = Clock.systemUTC();
     }
 
@@ -103,11 +107,20 @@ class MediaLibraryService {
         MediaAsset asset = get(id);
         repository.delete(asset);
         repository.flush();
+        events.publishEvent(new MediaAssetDeleted(id));
         store.delete(asset.storageKey());
     }
 
-    PresignedUrl downloadUrl(UUID id) {
+    @Override
+    public PresignedUrl downloadUrl(UUID id) {
         return store.presignedDownload(get(id).storageKey(), properties.downloadUrlValidity());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<MediaFile> find(UUID id) {
+        return repository.findById(id).map(a -> new MediaFile(a.id(), a.title(), a.kind(), a.contentType(),
+                a.sizeBytes(), a.sha256()));
     }
 
     private static String copyAndHash(InputStream content, Path target) throws IOException {
@@ -171,7 +184,7 @@ class MediaLibraryService {
         }
     }
 
-    static class MediaNotFoundException extends RuntimeException {
+    static class MediaNotFoundException extends java.util.NoSuchElementException {
         MediaNotFoundException(UUID id) {
             super("media " + id + " not found");
         }

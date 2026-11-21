@@ -43,6 +43,19 @@ cd web && npm install && npm start
 ./gradlew :player:run --args="--windowed --server-url=http://localhost:8090"
 ```
 
+### Running a MediaPlayer
+
+```sh
+./gradlew :player:installDist
+player/build/install/player/bin/player --server-url=http://<server>:8090 [--windowed] [--data-dir=<dir>]
+```
+
+On first start the player shows a pairing code; approve it in **Dispositivos** in the web app.
+Its identity (device id and token) and media cache live in the OS's config and cache folders
+(`~/.config/webpresenter-player`, `~/.cache/webpresenter-player` on Linux; `%APPDATA%` and
+`%LOCALAPPDATA%` on Windows), or under `--data-dir`. Delete the config folder to give a copied
+installation a new identity. `Shift+Esc` closes the player.
+
 Build and test everything Java: `./gradlew build` (the server tests use Testcontainers, so Docker
 must be running). Web unit tests: `cd web && npm test`.
 

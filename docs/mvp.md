@@ -58,10 +58,17 @@ WebSocket with JSON messages in an envelope: `{ "type", "id", "ts", "payload" }`
 | Player → Server | `PLAYBACK_STATE { itemId, state, positionMs }` | Playback state reports. |
 | Player → Server | `ERROR` | Failures (missing cache, decode error…). |
 
+Implemented in M3: `HELLO`, `PAIRING_PENDING`, `PAIRED`, `CONFIG`, `REVOKED`, `CACHE_STATUS`, `ERROR`
+(see `protocol/src/main/java/webpresenter/protocol/Message.java`).
+
 Design rules:
 - The player has no notion of *next* or *previous*. The `live` module computes them and always sends `PLAY` for a specific item. Reordering during a live event therefore requires nothing from the player.
 - Device authentication in the MVP uses a server-issued device token. Human users authenticate through Keycloak.
-- If the connection is lost, the player finishes the current item, shows the rest screen, and reconnects with backoff.
+- If the connection is lost, the player finishes the current item, shows the rest screen, and reconnects with backoff (1 s doubling up to 5 s).
+- A device can only be approved while connected: the token travels only over the live connection and the server keeps only its SHA-256.
+- An approved device presenting a missing or wrong token is rejected (`INVALID_TOKEN`) and never downgraded; an operator removes it to pair again.
+- A newer connection with the same device id replaces the older one, which is closed with code `4001` and waits 60 s before retrying (prevents two copies of one installation from flapping).
+- The devices page polls `GET /api/devices` every 3 s; live push to the web arrives with the `live` module (M5).
 
 ## Central server modules (MVP subset)
 
@@ -89,7 +96,7 @@ Design rules:
 | M0 ✅ | **Player spike**: mpv with JavaFX overlay and fade. Decision: libmpv (see results below). |
 | M1 ✅ | Monorepo skeleton, Docker Compose (PostgreSQL, Keycloak, SeaweedFS), build. |
 | M2 ✅ | Library: upload through the web, S3 storage, listing, preview, rename, delete; web login through Keycloak. |
-| M3 | Protocol, player connection, and device approval. |
+| M3 ✅ | Protocol, player connection, device approval, rest screen with verified cache. |
 | M4 | Event with items, pre-cache on the player. |
 | M5 | Live control, playback, rest screen, fade. **MVP complete.** |
 

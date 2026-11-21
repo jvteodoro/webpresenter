@@ -36,6 +36,8 @@ export class CurrentUser {
   readonly roleLabels = computed(() => (this.state()?.roles ?? []).map((role) => ROLE_LABELS[role] ?? role));
   /** May add, rename and remove library media. */
   readonly canManageLibrary = computed(() => this.hasAnyRole('ADMIN', 'AV_TECHNICIAN'));
+  /** May approve, configure and remove MediaPlayers. */
+  readonly canManageDevices = computed(() => this.hasAnyRole('ADMIN', 'AV_TECHNICIAN'));
 
   async load(): Promise<void> {
     this.state.set(await firstValueFrom(this.http.get<User>(`${environment.apiUrl}/api/me`)));
