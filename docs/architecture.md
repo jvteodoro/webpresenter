@@ -152,6 +152,7 @@ The event is executed and each item is played, with transitions if configured. T
 
 - **MediaPlayer on Windows**: run the player engine spike on Windows (libmpv DLL bundling, performance).
 - **Hardware decoding**: pick a tested `hwdec` per platform; the spike runs with software decoding.
+- **Player cache eviction**: the cache only grows today; evict files no longer referenced by the rest screen or the current event (with a size budget).
 - **Lyrics alignment quality**: evaluate WhisperX forced alignment on worship music, with and without Demucs vocal isolation.
 - **Extended ChordPro specification**: define the exact syntax for line and word timestamps.
 - **Live edits and pre-cache**: define the UX when an item is added during a live event and its media is not cached yet.

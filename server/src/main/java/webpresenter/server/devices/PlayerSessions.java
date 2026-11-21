@@ -8,6 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -74,7 +76,16 @@ class PlayerSessions {
         return true;
     }
 
+    /**
+     * Sends a message. Inside a transaction the message is held until commit, so a player never
+     * acts on state (a new device, a token) that could still be rolled back or is not yet visible
+     * to its next request.
+     */
     void send(WebSocketSession session, Message message) {
+        afterCommit(() -> sendNow(session, message));
+    }
+
+    private void sendNow(WebSocketSession session, Message message) {
         try {
             session.sendMessage(new TextMessage(codec.encode(message)));
         } catch (IOException e) {
@@ -91,7 +102,25 @@ class PlayerSessions {
         }
     }
 
+    /** Closes after the current transaction commits (immediately when there is none). */
     static void close(WebSocketSession session, CloseStatus status) {
+        afterCommit(() -> closeNow(session, status));
+    }
+
+    private static void afterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+        } else {
+            action.run();
+        }
+    }
+
+    private static void closeNow(WebSocketSession session, CloseStatus status) {
         try {
             session.close(status);
         } catch (IOException e) {

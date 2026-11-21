@@ -11,7 +11,9 @@ export interface DisplayInfo {
 }
 
 export interface CacheStatus {
+  eventId: string | null;
   itemsReady: number;
+  itemsFailed: number;
   itemsTotal: number;
   bytesReady: number;
   bytesTotal: number;

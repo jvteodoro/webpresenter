@@ -24,6 +24,7 @@ public final class PlayerApp extends Application {
     static final String VERSION = versionOrDev();
 
     private PresentationWindow window;
+    private PlayerController controller;
     private ServerConnection connection;
     private MediaCache cache;
 
@@ -40,7 +41,7 @@ public final class PlayerApp extends Application {
 
         window = new PresentationWindow(stage, config.windowed());
         DebugSnapshots snapshots = DebugSnapshots.fromSystemProperty(window.scene());
-        PlayerController controller = new PlayerController(window, identity, cache, config.serverUrl().toString(),
+        controller = new PlayerController(window, identity, cache, config.serverUrl().toString(),
                 snapshots::capture);
 
         connection = new ServerConnection(config.serverUrl(), new ProtocolCodec(),
@@ -63,6 +64,9 @@ public final class PlayerApp extends Application {
     public void stop() {
         if (connection != null) {
             connection.close();
+        }
+        if (controller != null) {
+            controller.close();
         }
         if (window != null) {
             window.close();

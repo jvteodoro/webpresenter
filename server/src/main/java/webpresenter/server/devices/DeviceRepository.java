@@ -9,4 +9,6 @@ interface DeviceRepository extends JpaRepository<Device, UUID> {
     List<Device> findAllByOrderByStatusDescNameAsc();
 
     List<Device> findAllByRestMediaId(UUID mediaId);
+
+    List<Device> findAllByStatus(DeviceStatus status);
 }

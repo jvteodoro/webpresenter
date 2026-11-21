@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { FIXTURES_DIR, login, mediaRow } from './fixtures';
 
 test.describe('Biblioteca de mídia', () => {
-  test('técnico envia, visualiza, renomeia, busca e exclui um vídeo', async ({ page }, testInfo) => {
+  test('técnico envia, visualiza, renomeia, busca e exclui um vídeo', async ({
+    page,
+  }, testInfo) => {
     const title = `E2E vídeo ${testInfo.project.name} ${Date.now()}`;
     const renamed = `${title} (editado)`;
     await login(page, 'tecnico');
@@ -25,7 +27,9 @@ test.describe('Biblioteca de mídia', () => {
     const dialog = page.getByRole('dialog');
     const video = dialog.locator('video');
     await expect(video).toBeVisible();
-    await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState)).toBeGreaterThanOrEqual(1);
+    await expect
+      .poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState))
+      .toBeGreaterThanOrEqual(1);
     expect(await video.evaluate((v: HTMLVideoElement) => Math.round(v.duration))).toBe(3);
     await dialog.getByRole('button', { name: 'Fechar' }).click();
     await expect(dialog).toBeHidden();

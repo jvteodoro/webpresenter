@@ -3,7 +3,9 @@ package webpresenter.player;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
 import javafx.application.Platform;
+import java.util.List;
 import webpresenter.player.cache.MediaCache;
+import webpresenter.player.cache.PreCache;
 import webpresenter.player.net.ServerConnection;
 import webpresenter.protocol.Message;
 
@@ -18,12 +20,15 @@ final class PlayerController implements ServerConnection.Listener {
     private final PresentationWindow window;
     private final PlayerIdentity identity;
     private final MediaCache cache;
+    private final PreCache preCache;
     private final String serverLabel;
     private final AtomicReference<ServerConnection> connection = new AtomicReference<>();
     private final Runnable onStateChanged;
 
     /** Rest screen most recently requested; a slower earlier download must not replace it. */
     private Message.MediaRef wantedRest;
+    /** The event to be ready for (presented live from M5 on). */
+    private Message.Prepare plan = Message.Prepare.none();
     private boolean paired;
 
     PlayerController(PresentationWindow window, PlayerIdentity identity, MediaCache cache, String serverLabel,
@@ -31,6 +36,7 @@ final class PlayerController implements ServerConnection.Listener {
         this.window = window;
         this.identity = identity;
         this.cache = cache;
+        this.preCache = new PreCache(cache, this::send);
         this.serverLabel = serverLabel;
         this.onStateChanged = onStateChanged;
         window.showInfo("Conectando ao servidor…", null, serverLabel);
@@ -83,10 +89,17 @@ final class PlayerController implements ServerConnection.Listener {
                 LOG.log(System.Logger.Level.INFO, "paired with the server");
             }
             case Message.Config config -> applyConfig(config);
+            case Message.Prepare prepare -> {
+                plan = prepare;
+                LOG.log(System.Logger.Level.INFO, "preparing event {0} ({1} items)", prepare.eventId(), prepare.items().size());
+                updateRequiredMedia();
+            }
             case Message.Revoked revoked -> {
                 paired = false;
                 identity.clearToken();
                 wantedRest = null;
+                plan = Message.Prepare.none();
+                updateRequiredMedia();
                 window.showInfo("Player removido do servidor", null, revoked.reason());
             }
             case Message.Error error -> {
@@ -106,16 +119,13 @@ final class PlayerController implements ServerConnection.Listener {
         window.moveTo(config.displayIndex());
         Message.MediaRef rest = config.restScreen();
         wantedRest = rest;
+        updateRequiredMedia();
         if (rest == null) {
             window.showBlack();
-            send(new Message.CacheStatus(0, 0, 0, 0));
             return;
         }
-        if (cache.cached(rest).isEmpty()) {
-            send(new Message.CacheStatus(0, 1, 0, rest.sizeBytes()));
-            if (!window.isPresenting()) {
-                window.showInfo("Baixando tela de descanso…", null, config.deviceName());
-            }
+        if (cache.cached(rest).isEmpty() && !window.isPresenting()) {
+            window.showInfo("Baixando tela de descanso…", null, config.deviceName());
         }
         cache.fetch(rest).whenComplete((file, error) -> Platform.runLater(() -> {
             if (wantedRest != rest) {
@@ -123,14 +133,29 @@ final class PlayerController implements ServerConnection.Listener {
             }
             if (error != null) {
                 LOG.log(System.Logger.Level.ERROR, "cannot cache rest screen " + rest.mediaId(), error);
-                send(new Message.Error("CACHE_FAILED", "rest screen " + rest.mediaId() + ": " + error.getMessage()));
                 window.showInfo("Não foi possível baixar a tela de descanso", null, error.getMessage());
             } else {
                 showRest(rest, file);
-                send(new Message.CacheStatus(1, 1, rest.sizeBytes(), rest.sizeBytes()));
             }
             onStateChanged.run();
         }));
+    }
+
+    /** Rest screen plus every media item of the plan must be in the cache. */
+    private void updateRequiredMedia() {
+        List<Message.MediaRef> eventMedia = plan.items().stream()
+                .filter(i -> i.type() == Message.ItemType.MEDIA && i.media() != null)
+                .map(Message.PlanItem::media)
+                .toList();
+        preCache.require(plan.eventId(), wantedRest, eventMedia);
+    }
+
+    Message.Prepare plan() {
+        return plan;
+    }
+
+    void close() {
+        preCache.close();
     }
 
     private void showRest(Message.MediaRef rest, Path file) {

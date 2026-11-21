@@ -168,6 +168,8 @@ public final class ServerConnection implements AutoCloseable {
 
         @Override
         public void onOpen(WebSocket ws) {
+            // HELLO must be the first message: publish the socket for other senders only after it.
+            ws.sendText(codec.encode(hello.get()), true).join();
             socket = ws;
             lastPong = Instant.now();
             scheduler.execute(() -> {
@@ -175,7 +177,6 @@ public final class ServerConnection implements AutoCloseable {
                         PING_INTERVAL.toMillis(), PING_INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
             });
             listener.onConnected();
-            send(hello.get());
             ws.request(1);
         }
 

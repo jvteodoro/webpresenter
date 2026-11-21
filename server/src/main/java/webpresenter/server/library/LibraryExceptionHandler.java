@@ -19,6 +19,13 @@ class LibraryExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.UNSUPPORTED_MEDIA_TYPE, e.getMessage());
     }
 
+    @ExceptionHandler(MediaLibraryService.MediaInUseException.class)
+    ProblemDetail inUse(MediaLibraryService.MediaInUseException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+        problem.setProperty("usages", e.usages);
+        return problem;
+    }
+
     @ExceptionHandler(MediaProbe.MediaProbeException.class)
     ProblemDetail probeFailed(MediaProbe.MediaProbeException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());

@@ -38,7 +38,27 @@ public final class MediaCache implements AutoCloseable {
     private final HttpClient http;
     private final ExecutorService downloads = Executors.newFixedThreadPool(2, Thread.ofPlatform()
             .name("media-download-", 0).daemon().factory());
-    private final Map<String, CompletableFuture<Path>> inFlight = new ConcurrentHashMap<>();
+    private final Map<String, Download> inFlight = new ConcurrentHashMap<>();
+
+    /** Receives the number of bytes downloaded so far (from a download thread). */
+    @FunctionalInterface
+    public interface Progress {
+        void bytesDownloaded(long bytes);
+
+        Progress NONE = bytes -> {};
+    }
+
+    /** A download in progress, shared by every caller asking for the same file. */
+    private static final class Download {
+        final java.util.List<Progress> listeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+        final java.util.concurrent.atomic.AtomicLong bytes = new java.util.concurrent.atomic.AtomicLong();
+        CompletableFuture<Path> future;
+
+        void report(long total) {
+            bytes.set(total);
+            listeners.forEach(l -> l.bytesDownloaded(total));
+        }
+    }
 
     public MediaCache(Path dir) {
         this(dir, HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
@@ -62,17 +82,33 @@ public final class MediaCache implements AutoCloseable {
 
     /** Returns the cached file, downloading and verifying it first if needed. Concurrent calls share one download. */
     public CompletableFuture<Path> fetch(MediaRef media) {
+        return fetch(media, Progress.NONE);
+    }
+
+    /** Like {@link #fetch(MediaRef)}, reporting downloaded bytes to {@code progress} while it runs. */
+    public CompletableFuture<Path> fetch(MediaRef media, Progress progress) {
         Optional<Path> existing = cached(media);
         if (existing.isPresent()) {
             return CompletableFuture.completedFuture(existing.get());
         }
         String key = media.sha256();
-        return inFlight.computeIfAbsent(key, k -> CompletableFuture
-                .supplyAsync(() -> download(media), downloads)
-                .whenComplete((path, error) -> inFlight.remove(k)));
+        fileFor(media); // validates the checksum before it is used as a file name
+        synchronized (inFlight) {
+            Download download = inFlight.get(key);
+            if (download == null) {
+                Download created = new Download();
+                created.future = CompletableFuture.supplyAsync(() -> download(media, created), downloads)
+                        .whenComplete((path, error) -> inFlight.remove(key));
+                download = created;
+                inFlight.put(key, download);
+            }
+            download.listeners.add(progress);
+            progress.bytesDownloaded(download.bytes.get());
+            return download.future;
+        }
     }
 
-    private Path download(MediaRef media) {
+    private Path download(MediaRef media, Download progress) {
         Path target = fileFor(media);
         Path partial = target.resolveSibling(target.getFileName() + ".part");
         try {
@@ -87,7 +123,14 @@ public final class MediaCache implements AutoCloseable {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             try (InputStream in = new DigestInputStream(response.body(), digest);
                     OutputStream out = Files.newOutputStream(partial)) {
-                in.transferTo(out);
+                byte[] buffer = new byte[256 * 1024];
+                long total = 0;
+                int read;
+                while ((read = in.read(buffer)) >= 0) {
+                    out.write(buffer, 0, read);
+                    total += read;
+                    progress.report(total);
+                }
             }
             String actual = HexFormat.of().formatHex(digest.digest());
             if (!actual.equals(media.sha256())) {

@@ -51,15 +51,16 @@ WebSocket with JSON messages in an envelope: `{ "type", "id", "ts", "payload" }`
 | Server → Player | `PAIRING_PENDING` | Device is waiting for operator approval. |
 | Server → Player | `PAIRED { token }` | Device approved. Token is issued by the server and stored hashed. |
 | Server → Player | `CONFIG` | Display to use, rest screen asset, default transition. |
-| Server → Player | `PREPARE { eventId, items[] }` | Items to pre-cache: mediaId, presigned URL, sha256, size. |
-| Player → Server | `CACHE_PROGRESS` / `CACHE_READY` | Pre-cache progress and completion. |
+| Server → Player | `PREPARE { eventId, title, items[] }` | The current event: ordered items (media refs with presigned URL, sha256, size; or slide text). |
+| Player → Server | `CACHE_STATUS { eventId, itemsReady, itemsTotal, itemsFailed, bytesReady, bytesTotal }` | Progress of everything the player must cache (rest screen + current event), throttled to 2/s. |
 | Server → Player | `PLAY { itemId, startAt, transition }` | Play a specific item at a scheduled instant. |
 | Server → Player | `PAUSE` / `RESUME` / `SHOW_REST` | Playback control. |
 | Player → Server | `PLAYBACK_STATE { itemId, state, positionMs }` | Playback state reports. |
 | Player → Server | `ERROR` | Failures (missing cache, decode error…). |
 
-Implemented in M3: `HELLO`, `PAIRING_PENDING`, `PAIRED`, `CONFIG`, `REVOKED`, `CACHE_STATUS`, `ERROR`
-(see `protocol/src/main/java/webpresenter/protocol/Message.java`).
+Implemented so far (M3–M4): `HELLO`, `PAIRING_PENDING`, `PAIRED`, `CONFIG`, `PREPARE`, `REVOKED`,
+`CACHE_STATUS`, `ERROR` (see `protocol/src/main/java/webpresenter/protocol/Message.java`). Peers ignore
+unknown fields and default missing ones, so slightly different versions keep talking.
 
 Design rules:
 - The player has no notion of *next* or *previous*. The `live` module computes them and always sends `PLAY` for a specific item. Reordering during a live event therefore requires nothing from the player.
@@ -68,7 +69,16 @@ Design rules:
 - A device can only be approved while connected: the token travels only over the live connection and the server keeps only its SHA-256.
 - An approved device presenting a missing or wrong token is rejected (`INVALID_TOKEN`) and never downgraded; an operator removes it to pair again.
 - A newer connection with the same device id replaces the older one, which is closed with code `4001` and waits 60 s before retrying (prevents two copies of one installation from flapping).
-- The devices page polls `GET /api/devices` every 3 s; live push to the web arrives with the `live` module (M5).
+- Messages to players are sent after the database transaction commits, never before.
+- The devices page polls `GET /api/devices` every 3 s and the event page polls `GET /api/devices/readiness` every 2 s; live push to the web arrives with the `live` module (M5).
+
+## Events (M4)
+
+- An event is an ordered list of items: library media or text slides. Leaders, AV technicians and admins edit; everyone signed in can read.
+- Exactly zero or one event is the **current event** (`POST /api/events/{id}/current`). Players receive it in `PREPARE` on connection and whenever it or its items change, and download all its media. Preparing again retries failed downloads.
+- A file is downloaded once even if used by several items or also as the rest screen.
+- Library media used in an event cannot be deleted (409 listing the events), so a plan never silently loses an item.
+- Concurrent edits of the same event are serialized with optimistic locking; the loser gets 409 and the UI reloads the event.
 
 ## Central server modules (MVP subset)
 
@@ -77,7 +87,7 @@ Design rules:
 | `identity` | Validate Keycloak JWTs, map realm roles. |
 | `storage` | Upload to the S3 store, generate presigned download URLs. |
 | `library` | Media asset registry (type, sha256, size, duration via ffprobe), upload endpoint. |
-| `planning` | Event as a flat ordered list of items (media or text slide). |
+| `planning` | Event as a flat ordered list of items (media or text slide), the current event, media-usage veto. |
 | `devices` | Player connection, pending/approval, device token, configuration, rest screen. |
 | `live` | Open an event live, play/next/previous/stop/rest, broadcast live state to the web. |
 
@@ -97,7 +107,7 @@ Design rules:
 | M1 ✅ | Monorepo skeleton, Docker Compose (PostgreSQL, Keycloak, SeaweedFS), build. |
 | M2 ✅ | Library: upload through the web, S3 storage, listing, preview, rename, delete; web login through Keycloak. |
 | M3 ✅ | Protocol, player connection, device approval, rest screen with verified cache. |
-| M4 | Event with items, pre-cache on the player. |
+| M4 ✅ | Event with items (media and text slides), current event, pre-cache on the player with readiness. |
 | M5 | Live control, playback, rest screen, fade. **MVP complete.** |
 
 ## M0: player spike

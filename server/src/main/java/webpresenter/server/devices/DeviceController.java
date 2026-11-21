@@ -37,6 +37,13 @@ class DeviceController {
         return devices.list();
     }
 
+    /** Whether players are ready for the current event; worship leaders need this before going live. */
+    @GetMapping("/readiness")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AV_TECHNICIAN', 'WORSHIP_LEADER')")
+    List<DeviceService.Readiness> readiness() {
+        return devices.readiness();
+    }
+
     @PostMapping("/{id}/approve")
     DeviceService.DeviceView approve(@PathVariable UUID id, @Valid @RequestBody(required = false) ApproveRequest request,
             Authentication user) {

@@ -109,7 +109,7 @@ class DeviceFlowIntegrationTests {
             assertThat(sha256(downloaded)).isEqualTo(sha256(image));
 
             // 5. Cache progress reported by the player shows up for operators.
-            player.send(new Message.CacheStatus(1, 1, image.length, image.length));
+            player.send(new Message.CacheStatus(null, 1, 1, 0, image.length, image.length));
             await().atMost(TestPlayer.timeout()).untilAsserted(() -> mvc.perform(get("/api/devices").with(operator()))
                     .andExpect(jsonPath("$[?(@.id == '%s')].cacheStatus.itemsReady", id).value(1)));
 
@@ -179,7 +179,7 @@ class DeviceFlowIntegrationTests {
     @Test
     void requiresHelloFirst() {
         try (TestPlayer player = TestPlayer.connect(port, UUID.randomUUID())) {
-            player.send(new Message.CacheStatus(0, 0, 0, 0));
+            player.send(new Message.CacheStatus(null, 0, 0, 0, 0, 0));
             assertThat(player.expect(Message.Error.class).code()).isEqualTo("HELLO_REQUIRED");
             player.awaitClose();
         }

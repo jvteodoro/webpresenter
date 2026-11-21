@@ -12,8 +12,10 @@ import tools.jackson.databind.node.ObjectNode;
 public final class ProtocolCodec {
 
     private final JsonMapper json = JsonMapper.builder()
-            // Newer peers may add fields; older peers must keep working.
+            // Peers of different versions must keep understanding each other: unknown fields are
+            // ignored and fields an older peer does not send take their default (0, false, null).
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
             .build();
     private final Clock clock;
 

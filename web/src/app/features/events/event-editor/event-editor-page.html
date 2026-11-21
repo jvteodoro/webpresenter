@@ -1,0 +1,139 @@
+@if (loadError()) {
+  <p class="error">Evento não encontrado. <a routerLink="/eventos">Voltar aos eventos</a></p>
+} @else if (event(); as e) {
+  <header class="page-header">
+    <a mat-icon-button routerLink="/eventos" aria-label="Voltar aos eventos"><mat-icon>arrow_back</mat-icon></a>
+    <div class="titles">
+      <h1>
+        {{ e.title }}
+        @if (e.current) {
+          <span class="badge">Evento atual</span>
+        }
+      </h1>
+      <div class="meta">
+        @if (e.startsAt) { {{ e.startsAt | date: "EEEE, d 'de' MMMM 'às' HH:mm" }} · }
+        {{ e.items.length }} {{ e.items.length === 1 ? 'item' : 'itens' }}
+        @if (totalDurationMs() > 0) { · {{ totalDurationMs() | duration }} de mídia }
+      </div>
+    </div>
+    @if (canEdit()) {
+      <button mat-icon-button [matMenuTriggerFor]="eventMenu" aria-label="Opções do evento"><mat-icon>more_vert</mat-icon></button>
+      <mat-menu #eventMenu="matMenu" xPosition="before">
+        <button mat-menu-item (click)="editDetails()"><mat-icon>edit</mat-icon>Editar título e data</button>
+        <button mat-menu-item (click)="deleteEvent()"><mat-icon>delete</mat-icon>Excluir evento</button>
+      </mat-menu>
+    }
+  </header>
+
+  @if (canEdit()) {
+    <section class="prepare card" [class.active]="e.current">
+      @if (!e.current) {
+        <div class="prepare-text">
+          <strong>Preparar nos players</strong>
+          <span>Os players baixam todas as mídias deste evento para tocar sem depender da rede.</span>
+        </div>
+        <button mat-flat-button (click)="prepare()" [disabled]="saving()">
+          <mat-icon>download</mat-icon>
+          Preparar nos players
+        </button>
+      } @else {
+        <div class="prepare-text">
+          <strong>Evento atual</strong>
+          @if (readiness(); as players) {
+            @if (players.length === 0) {
+              <span>Nenhum player aprovado. Aprove um player em Dispositivos.</span>
+            } @else if (onlineCount() === 0) {
+              <span>Nenhum player online.</span>
+            } @else {
+              <span>{{ readyCount() }} de {{ onlineCount() }} {{ onlineCount() === 1 ? 'player online pronto' : 'players online prontos' }}</span>
+            }
+          }
+        </div>
+        <button mat-stroked-button (click)="prepare()" [disabled]="saving()" matTooltip="Pede aos players que baixem de novo o que faltar">
+          <mat-icon>refresh</mat-icon>
+          Preparar de novo
+        </button>
+        @if (readiness(); as players) {
+          <ul class="players">
+            @for (p of players; track p.id) {
+              <li class="player" [attr.aria-label]="p.name">
+                <span class="dot" [class.online]="p.online"></span>
+                <span class="player-name">{{ p.name }}</span>
+                <span class="player-state">
+                  @if (!p.online) {
+                    Offline
+                  } @else if (isReady(p)) {
+                    <mat-icon class="ok">check_circle</mat-icon> Pronto
+                  } @else if (forThisEvent(p) && p.cacheStatus!.itemsFailed > 0) {
+                    <mat-icon class="bad">error</mat-icon> {{ p.cacheStatus!.itemsFailed }} com falha
+                  } @else if (forThisEvent(p)) {
+                    Baixando {{ p.cacheStatus!.bytesReady | fileSize }} de {{ p.cacheStatus!.bytesTotal | fileSize }}
+                  } @else {
+                    Aguardando…
+                  }
+                </span>
+                @if (p.online && forThisEvent(p) && !isReady(p)) {
+                  <mat-progress-bar mode="determinate" [value]="percent(p)" />
+                }
+              </li>
+            }
+          </ul>
+        }
+      }
+    </section>
+  }
+
+  <section class="card">
+    <div class="items-header">
+      <h2>Ordem do evento</h2>
+      @if (canEdit()) {
+        <div class="add">
+          <button mat-stroked-button (click)="addMedia()" [disabled]="saving()"><mat-icon>video_library</mat-icon>Adicionar mídia</button>
+          <button mat-stroked-button (click)="addSlide()" [disabled]="saving()"><mat-icon>text_fields</mat-icon>Adicionar slide</button>
+        </div>
+      }
+    </div>
+    @if (saving()) {
+      <mat-progress-bar mode="indeterminate" class="saving" />
+    }
+
+    @if (e.items.length === 0) {
+      <p class="empty">Nenhum item ainda. Adicione mídias da biblioteca ou slides de texto.</p>
+    } @else {
+      <ol class="items" cdkDropList [cdkDropListDisabled]="!canEdit() || saving()" (cdkDropListDropped)="drop($event)">
+        @for (item of e.items; track item.id; let i = $index) {
+          <li class="item" cdkDrag [attr.aria-label]="item.title">
+            @if (canEdit()) {
+              <mat-icon class="handle" cdkDragHandle aria-label="Arrastar para reordenar">drag_indicator</mat-icon>
+            }
+            <span class="position">{{ i + 1 }}</span>
+            <mat-icon class="kind">{{ icon(item) }}</mat-icon>
+            <span class="item-main">
+              <span class="item-title">{{ item.title }}</span>
+              @if (item.slide?.body) {
+                <span class="item-sub">{{ preview(item.slide!.body) }}</span>
+              }
+            </span>
+            <span class="item-meta">
+              @if (item.type === 'SLIDE') { Slide } @else { {{ item.media?.durationMs | duration }} }
+            </span>
+            @if (canEdit()) {
+              <span class="item-actions">
+                @if (item.type === 'SLIDE') {
+                  <button mat-icon-button aria-label="Editar slide" matTooltip="Editar slide" [disabled]="saving()" (click)="editSlide(item)">
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                }
+                <button mat-icon-button aria-label="Remover item" matTooltip="Remover do evento" [disabled]="saving()" (click)="removeItem(item)">
+                  <mat-icon>close</mat-icon>
+                </button>
+              </span>
+            }
+          </li>
+        }
+      </ol>
+    }
+  </section>
+} @else {
+  <mat-progress-bar mode="indeterminate" />
+}

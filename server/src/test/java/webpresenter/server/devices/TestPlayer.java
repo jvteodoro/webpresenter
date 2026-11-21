@@ -25,6 +25,7 @@ final class TestPlayer implements AutoCloseable {
 
     private final ProtocolCodec codec = new ProtocolCodec();
     private final BlockingQueue<Message> received = new LinkedBlockingQueue<>();
+    private final java.util.List<Message> pending = new java.util.ArrayList<>();
     private final CompletableFuture<Integer> closed = new CompletableFuture<>();
     private final WebSocket socket;
     final UUID deviceId;
@@ -50,14 +51,34 @@ final class TestPlayer implements AutoCloseable {
         return this;
     }
 
+    /** Next unconsumed message of the given type; messages of other types stay queued for later expectations. */
     <T extends Message> T expect(Class<T> type) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         try {
-            Message message = received.poll(10, TimeUnit.SECONDS);
-            assertThat(message).as("expected %s", type.getSimpleName()).isInstanceOf(type);
-            return type.cast(message);
+            while (System.nanoTime() < deadline) {
+                synchronized (pending) {
+                    for (var it = pending.iterator(); it.hasNext(); ) {
+                        Message m = it.next();
+                        if (type.isInstance(m)) {
+                            it.remove();
+                            return type.cast(m);
+                        }
+                    }
+                }
+                Message next = received.poll(100, TimeUnit.MILLISECONDS);
+                if (next != null) {
+                    synchronized (pending) {
+                        pending.add(next);
+                    }
+                }
+            }
         } catch (InterruptedException e) {
             throw new IllegalStateException(e);
         }
+        synchronized (pending) {
+            assertThat(pending).as("expected a %s", type.getSimpleName()).anyMatch(type::isInstance);
+        }
+        throw new AssertionError("unreachable");
     }
 
     int awaitClose() {

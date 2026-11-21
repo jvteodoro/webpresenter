@@ -24,7 +24,12 @@ class ProtocolCodecTest {
         return Stream.of(
                 new Hello("d-1", "sala-1", "0.1.0", 1, List.of(new DisplayInfo(0, 1920, 1080, 1.0, true)), null),
                 new Hello("d-1", "sala-1", "0.1.0", 1, List.of(), "secret-token"),
-                new CacheStatus(2, 5, 1000, 9000),
+                new CacheStatus("e-1", 2, 5, 1, 1000, 9000),
+                new CacheStatus(null, 0, 0, 0, 0, 0),
+                new Prepare("e-1", "Culto de domingo", List.of(
+                        new PlanItem("i-1", ItemType.MEDIA, "Abertura", media, null),
+                        new PlanItem("i-2", ItemType.SLIDE, "Avisos", null, new Slide("Avisos", "Culto de oração\nquarta, 19h30")))),
+                Prepare.none(),
                 new PairingPending("K7Q-4ZP"),
                 new Paired("secret-token"),
                 new Config("Telão", 1, media, Transition.DEFAULT),
@@ -59,6 +64,15 @@ class ProtocolCodecTest {
                 """;
 
         assertEquals(new Paired("t"), codec.decode(json).payload());
+    }
+
+    @Test
+    void fieldsMissingFromOlderPeersTakeDefaults() {
+        String json = """
+                {"type":"CACHE_STATUS","id":"1","ts":"2026-11-21T15:00:00Z","payload":{"itemsReady":1,"itemsTotal":1,"bytesReady":10,"bytesTotal":10}}
+                """;
+
+        assertEquals(new CacheStatus(null, 1, 1, 0, 10, 10), codec.decode(json).payload());
     }
 
     @Test

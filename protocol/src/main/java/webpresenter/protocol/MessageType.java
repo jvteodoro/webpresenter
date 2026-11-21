@@ -12,6 +12,7 @@ public enum MessageType {
     PAIRING_PENDING(Message.PairingPending.class),
     PAIRED(Message.Paired.class),
     CONFIG(Message.Config.class),
+    PREPARE(Message.Prepare.class),
     REVOKED(Message.Revoked.class),
     ERROR(Message.Error.class);
 

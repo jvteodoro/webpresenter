@@ -25,8 +25,20 @@ public sealed interface Message {
         }
     }
 
-    /** Download progress of the media the player was asked to keep in its cache. */
-    record CacheStatus(int itemsReady, int itemsTotal, long bytesReady, long bytesTotal) implements Message {}
+    /**
+     * Download progress of everything the player must keep in its cache: the rest screen plus the
+     * media of the prepared event. Files are counted once even if used by several items.
+     *
+     * @param eventId event of the last {@link Prepare} this status covers, or null if none
+     * @param itemsFailed files whose download or verification failed (retried on the next PREPARE)
+     */
+    record CacheStatus(String eventId, int itemsReady, int itemsTotal, int itemsFailed, long bytesReady,
+            long bytesTotal) implements Message {
+
+        public boolean complete() {
+            return itemsReady == itemsTotal && itemsFailed == 0;
+        }
+    }
 
     // ------------------------------------------------------------------ server → player
 
@@ -44,6 +56,24 @@ public sealed interface Message {
      */
     record Config(String deviceName, int displayIndex, MediaRef restScreen, Transition transition) implements Message {}
 
+    /**
+     * The event the player must be ready to present: all its media must be downloaded before it
+     * goes live. Sent on connection and whenever the current event or its items change.
+     *
+     * @param eventId null when there is no current event (the player may drop event media)
+     * @param items in presentation order
+     */
+    record Prepare(String eventId, String title, List<PlanItem> items) implements Message {
+
+        public Prepare {
+            items = items == null ? List.of() : List.copyOf(items);
+        }
+
+        public static Prepare none() {
+            return new Prepare(null, null, List.of());
+        }
+    }
+
     /** The device was removed by an operator; the player forgets its token. */
     record Revoked(String reason) implements Message {}
 
@@ -58,6 +88,13 @@ public sealed interface Message {
 
     /** A media file the player must download (and verify) before showing it. */
     record MediaRef(String mediaId, MediaKind kind, String url, String sha256, long sizeBytes) {}
+
+    /** One step of an event: either a media file or a text slide rendered by the player. */
+    record PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide) {}
+
+    record Slide(String title, String body) {}
+
+    enum ItemType { MEDIA, SLIDE }
 
     record Transition(TransitionType type, int durationMs) {
 

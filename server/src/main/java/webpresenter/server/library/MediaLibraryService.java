@@ -20,6 +20,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,15 +38,18 @@ class MediaLibraryService implements MediaCatalog {
     private final MediaProbe probe;
     private final LibraryProperties properties;
     private final ApplicationEventPublisher events;
+    /** Resolved lazily: implementations live in modules that themselves depend on the library. */
+    private final ObjectProvider<MediaUsage> usages;
     private final Clock clock;
 
     MediaLibraryService(MediaAssetRepository repository, MediaStore store, MediaProbe probe,
-            LibraryProperties properties, ApplicationEventPublisher events) {
+            LibraryProperties properties, ApplicationEventPublisher events, ObjectProvider<MediaUsage> usages) {
         this.repository = repository;
         this.store = store;
         this.probe = probe;
         this.properties = properties;
         this.events = events;
+        this.usages = usages;
         this.clock = Clock.systemUTC();
     }
 
@@ -105,6 +109,10 @@ class MediaLibraryService implements MediaCatalog {
     @Transactional
     void delete(UUID id) {
         MediaAsset asset = get(id);
+        List<String> usedIn = usages.orderedStream().flatMap(u -> u.usagesOf(id).stream()).toList();
+        if (!usedIn.isEmpty()) {
+            throw new MediaInUseException(asset.title(), usedIn);
+        }
         repository.delete(asset);
         repository.flush();
         events.publishEvent(new MediaAssetDeleted(id));
@@ -120,7 +128,7 @@ class MediaLibraryService implements MediaCatalog {
     @Transactional(readOnly = true)
     public Optional<MediaFile> find(UUID id) {
         return repository.findById(id).map(a -> new MediaFile(a.id(), a.title(), a.kind(), a.contentType(),
-                a.sizeBytes(), a.sha256()));
+                a.sizeBytes(), a.sha256(), a.durationMs()));
     }
 
     private static String copyAndHash(InputStream content, Path target) throws IOException {
@@ -187,6 +195,15 @@ class MediaLibraryService implements MediaCatalog {
     static class MediaNotFoundException extends java.util.NoSuchElementException {
         MediaNotFoundException(UUID id) {
             super("media " + id + " not found");
+        }
+    }
+
+    static class MediaInUseException extends RuntimeException {
+        final List<String> usages;
+
+        MediaInUseException(String title, List<String> usages) {
+            super("'" + title + "' is used in: " + String.join(", ", usages));
+            this.usages = List.copyOf(usages);
         }
     }
 

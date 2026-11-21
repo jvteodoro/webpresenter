@@ -33,7 +33,9 @@ export class FakePlayer {
   }
 
   send(type: string, payload: unknown): void {
-    this.socket.send(JSON.stringify({ type, id: randomUUID(), ts: new Date().toISOString(), payload }));
+    this.socket.send(
+      JSON.stringify({ type, id: randomUUID(), ts: new Date().toISOString(), payload }),
+    );
   }
 
   /** Waits for the next message of the given type that was not consumed yet. */
@@ -46,7 +48,21 @@ export class FakePlayer {
       }
       await new Promise((r) => setTimeout(r, 50));
     }
-    throw new Error(`fake player did not receive ${type}; got ${this.received.map((m) => m.type).join(', ')}`);
+    throw new Error(
+      `fake player did not receive ${type}; got ${this.received.map((m) => m.type).join(', ')}`,
+    );
+  }
+
+  /** Skips earlier plans and returns the PREPARE for the event with this title. */
+  async nextPrepareFor(title: string, timeoutMs = 10_000): Promise<any> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const plan = await this.next('PREPARE', deadline - Date.now());
+      if (plan.title === title) {
+        return plan;
+      }
+    }
+    throw new Error(`no PREPARE for "${title}"`);
   }
 
   close(): void {
@@ -54,11 +70,56 @@ export class FakePlayer {
   }
 }
 
+/** Access token of a development user, for API calls made by tests. */
+export async function apiToken(user = 'admin'): Promise<string> {
+  const form = new URLSearchParams({
+    client_id: 'webpresenter-dev-cli',
+    grant_type: 'password',
+    username: user,
+    password: user,
+  });
+  const response = await fetch(
+    'http://localhost:8180/realms/webpresenter/protocol/openid-connect/token',
+    { method: 'POST', body: form },
+  );
+  return (await response.json()).access_token as string;
+}
+
 /** Removes a device through the API as the development admin (ignores devices already gone). */
 export async function deleteDevice(id: string): Promise<void> {
-  const form = new URLSearchParams({ client_id: 'webpresenter-dev-cli', grant_type: 'password', username: 'admin', password: 'admin' });
-  const token = await fetch('http://localhost:8180/realms/webpresenter/protocol/openid-connect/token', { method: 'POST', body: form })
-    .then((r) => r.json())
-    .then((j) => j.access_token as string);
-  await fetch(`http://localhost:8090/api/devices/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+  const token = await apiToken();
+  await fetch(`http://localhost:8090/api/devices/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+/** Approves a pending (connected) device through the API. */
+export async function approveDevice(id: string, name: string): Promise<void> {
+  const token = await apiToken();
+  const response = await fetch(`http://localhost:8090/api/devices/${id}/approve`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) {
+    throw new Error(`approve failed: ${response.status}`);
+  }
+}
+
+/** Deletes events and library media whose titles contain the marker (test cleanup, best effort). */
+export async function deleteTestData(marker: string): Promise<void> {
+  const headers = { Authorization: `Bearer ${await apiToken()}` };
+  const events: { id: string; title: string }[] = await fetch('http://localhost:8090/api/events', {
+    headers,
+  }).then((r) => r.json());
+  for (const e of events.filter((x) => x.title.includes(marker))) {
+    await fetch(`http://localhost:8090/api/events/${e.id}`, { method: 'DELETE', headers });
+  }
+  const media: { id: string; title: string }[] = await fetch('http://localhost:8090/api/media', {
+    headers,
+  }).then((r) => r.json());
+  for (const m of media.filter((x) => x.title.includes(marker))) {
+    await fetch(`http://localhost:8090/api/media/${m.id}`, { method: 'DELETE', headers });
+  }
 }

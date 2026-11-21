@@ -72,7 +72,14 @@ test.describe('Dispositivos', () => {
       await expect(card).toContainText('Tela 2 · 1280×720');
 
       // Cache progress reported by the player appears on the card.
-      player.send('CACHE_STATUS', { itemsReady: 1, itemsTotal: 1, bytesReady: 1000, bytesTotal: 1000 });
+      player.send('CACHE_STATUS', {
+        eventId: null,
+        itemsReady: 1,
+        itemsTotal: 1,
+        itemsFailed: 0,
+        bytesReady: 1000,
+        bytesTotal: 1000,
+      });
       await expect(card).toContainText('Pronta');
 
       // Remove: the player is revoked and the card disappears.

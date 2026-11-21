@@ -12,6 +12,7 @@ import { filter, switchMap } from 'rxjs';
 import { CurrentUser } from '../../core/auth/current-user';
 import { MediaAsset, MediaKind } from '../../core/media/media';
 import { MediaApi } from '../../core/media/media-api';
+import { normalizeText } from '../../shared/text';
 import { ConfirmDialog, ConfirmDialogData } from '../../shared/dialogs/confirm-dialog';
 import { TextPromptDialog, TextPromptDialogData } from '../../shared/dialogs/text-prompt-dialog';
 import { MediaPreviewDialog } from './media-preview-dialog/media-preview-dialog';
@@ -47,12 +48,12 @@ export class LibraryPage {
   protected readonly kind = signal<MediaKind | 'ALL'>('ALL');
 
   protected readonly visible = computed(() => {
-    const term = normalize(this.search());
+    const term = normalizeText(this.search());
     const kind = this.kind();
     return this.assets().filter(
       (a) =>
         (kind === 'ALL' || a.kind === kind) &&
-        (!term || normalize(a.title).includes(term) || normalize(a.originalFilename).includes(term)),
+        (!term || normalizeText(a.title).includes(term) || normalizeText(a.originalFilename).includes(term)),
     );
   });
 
@@ -119,16 +120,16 @@ export class LibraryPage {
           this.assets.update((assets) => assets.filter((a) => a.id !== asset.id));
           this.notify(`"${asset.title}" excluída.`);
         },
-        error: (e: HttpErrorResponse) => this.notify(`Não foi possível excluir (${e.status}).`),
+        error: (e: HttpErrorResponse) =>
+          this.notify(
+            e.status === 409 && e.error?.usages
+              ? `"${asset.title}" está em uso no ${(e.error.usages as string[]).join(', ')}. Remova-a de lá antes de excluir.`
+              : `Não foi possível excluir (${e.status}).`,
+          ),
       });
   }
 
   private notify(message: string): void {
-    this.snackBar.open(message, 'OK', { duration: 4000 });
+    this.snackBar.open(message, 'OK', { duration: 6000 });
   }
-}
-
-/** Lower-case without accents, so "louvor" matches "Louvôr". */
-function normalize(text: string): string {
-  return text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
 }
