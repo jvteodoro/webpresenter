@@ -37,6 +37,14 @@ export class EventsApi {
     return this.http.post<EventDetail>(`${this.baseUrl}/${id}/items`, { type: 'SLIDE', ...slide });
   }
 
+  addSong(id: string, songId: string, recordingId: string | null): Observable<EventDetail> {
+    return this.http.post<EventDetail>(`${this.baseUrl}/${id}/items`, { type: 'SONG', songId, recordingId });
+  }
+
+  chooseRecording(id: string, itemId: string, recordingId: string | null): Observable<EventDetail> {
+    return this.http.put<EventDetail>(`${this.baseUrl}/${id}/items/${itemId}/recording`, { recordingId });
+  }
+
   editSlide(id: string, itemId: string, slide: SlideInput): Observable<EventDetail> {
     return this.http.put<EventDetail>(`${this.baseUrl}/${id}/items/${itemId}`, slide);
   }

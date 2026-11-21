@@ -18,6 +18,7 @@ public enum MessageType {
     PAUSE(Message.Pause.class),
     RESUME(Message.Resume.class),
     SHOW_REST(Message.ShowRest.class),
+    SHOW_SLIDE(Message.ShowSlide.class),
     REVOKED(Message.Revoked.class),
     ERROR(Message.Error.class);
 

@@ -37,6 +37,14 @@ class EventItem {
     @Column(name = "slide_title")
     private String slideTitle;
 
+    /** Song for SONG items (no cross-module foreign key). */
+    @Column(name = "song_id")
+    private UUID songId;
+
+    /** Recording of the song to play, or null to present the lyrics without audio. */
+    @Column(name = "recording_id")
+    private UUID recordingId;
+
     @Column(name = "slide_body")
     private String slideBody;
 
@@ -53,6 +61,20 @@ class EventItem {
         item.slideTitle = title;
         item.slideBody = body;
         return item;
+    }
+
+    static EventItem song(PlannedEvent event, UUID songId, UUID recordingId) {
+        EventItem item = new EventItem(event, ItemType.SONG);
+        item.songId = songId;
+        item.recordingId = recordingId;
+        return item;
+    }
+
+    void chooseRecording(UUID recordingId) {
+        if (type != ItemType.SONG) {
+            throw new PlanningService.InvalidRequestException("only songs have recordings");
+        }
+        this.recordingId = recordingId;
     }
 
     private EventItem(PlannedEvent event, ItemType type) {
@@ -79,4 +101,6 @@ class EventItem {
     UUID mediaId() { return mediaId; }
     String slideTitle() { return slideTitle; }
     String slideBody() { return slideBody; }
+    UUID songId() { return songId; }
+    UUID recordingId() { return recordingId; }
 }

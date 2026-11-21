@@ -1,7 +1,7 @@
 import { CacheStatus } from '../devices/device';
 import { MediaKind } from '../media/media';
 
-export type ItemType = 'MEDIA' | 'SLIDE';
+export type ItemType = 'MEDIA' | 'SLIDE' | 'SONG';
 
 export interface EventSummary {
   id: string;
@@ -18,6 +18,19 @@ export interface EventItem {
   title: string;
   media: { id: string; title: string; kind: MediaKind | null; durationMs: number | null } | null;
   slide: { title: string; body: string } | null;
+  song: SongItem | null;
+}
+
+/** A song in an event: the chosen recording (null: lyrics only) and the ones available. */
+export interface SongItem {
+  id: string;
+  title: string;
+  slideCount: number;
+  recordingId: string | null;
+  recordingKind: 'SUNG' | 'PLAYBACK' | 'OTHER' | null;
+  timed: boolean;
+  durationMs: number | null;
+  recordings: { id: string; kind: 'SUNG' | 'PLAYBACK' | 'OTHER'; timed: boolean }[];
 }
 
 export interface EventDetail {

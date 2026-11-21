@@ -49,6 +49,12 @@ class LiveController {
                 }
                 yield live.play(command.itemId());
             }
+            case SLIDE -> {
+                if (command.itemId() == null || command.slide() == null) {
+                    throw new LiveService.LiveException("itemId and slide are required for SLIDE");
+                }
+                yield live.slide(command.itemId(), command.slide());
+            }
             case NEXT -> live.next();
             case PREVIOUS -> live.previous();
             case PAUSE -> live.pause();
@@ -57,9 +63,9 @@ class LiveController {
         };
     }
 
-    enum Action { PLAY, NEXT, PREVIOUS, PAUSE, RESUME, REST }
+    enum Action { PLAY, SLIDE, NEXT, PREVIOUS, PAUSE, RESUME, REST }
 
-    record Command(@NotNull Action action, UUID itemId) {}
+    record Command(@NotNull Action action, UUID itemId, Integer slide) {}
 
     @ExceptionHandler(LiveService.LiveException.class)
     ProblemDetail conflict(RuntimeException e) {

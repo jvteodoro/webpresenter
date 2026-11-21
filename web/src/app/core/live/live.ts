@@ -3,7 +3,14 @@ import { ItemType } from '../events/event';
 
 export type LiveStatus = 'REST' | 'PLAYING' | 'PAUSED' | 'SHOWING';
 export type PlaybackStatus = 'LOADING' | 'PLAYING' | 'PAUSED' | 'SHOWING' | 'ENDED' | 'REST' | 'FAILED';
-export type LiveAction = 'PLAY' | 'NEXT' | 'PREVIOUS' | 'PAUSE' | 'RESUME' | 'REST';
+export type LiveAction = 'PLAY' | 'SLIDE' | 'NEXT' | 'PREVIOUS' | 'PAUSE' | 'RESUME' | 'REST';
+
+export interface LiveSlide {
+  label: string;
+  lines: string[];
+  cue: string | null;
+  instrumental: boolean;
+}
 
 export interface LiveItem {
   id: string;
@@ -11,6 +18,10 @@ export interface LiveItem {
   title: string;
   kind: MediaKind | null;
   durationMs: number | null;
+  /** Lyrics slides of a SONG item. */
+  slides: LiveSlide[];
+  hasAudio: boolean;
+  timed: boolean;
 }
 
 export interface LivePlayer {
@@ -30,6 +41,8 @@ export interface LiveState {
   title: string | null;
   items: LiveItem[];
   currentIndex: number;
+  /** Slide of the song on screen; -1 when the current item is not a song. */
+  currentSlide: number;
   status: LiveStatus;
   itemStartedAt: string | null;
   players: LivePlayer[];
@@ -37,5 +50,5 @@ export interface LiveState {
 }
 
 export function isTimeBased(item: LiveItem | null | undefined): boolean {
-  return !!item && (item.kind === 'VIDEO' || item.kind === 'AUDIO');
+  return !!item && (item.kind === 'VIDEO' || item.kind === 'AUDIO' || item.hasAudio);
 }

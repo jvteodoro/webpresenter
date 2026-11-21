@@ -48,8 +48,13 @@ public sealed interface Message {
      * @param durationMs media duration if known, otherwise 0
      * @param detail human-readable reason when {@code status} is FAILED
      */
-    record PlaybackState(String itemId, PlaybackStatus status, long positionMs, long durationMs, String detail)
-            implements Message {}
+    record PlaybackState(String itemId, PlaybackStatus status, long positionMs, long durationMs, String detail,
+            Integer slide) implements Message {
+
+        public PlaybackState(String itemId, PlaybackStatus status, long positionMs, long durationMs, String detail) {
+            this(itemId, status, positionMs, durationMs, detail, null);
+        }
+    }
 
     // ------------------------------------------------------------------ server → player
 
@@ -90,9 +95,21 @@ public sealed interface Message {
      *
      * @param startAt instant at which to start, so several players start together
      * @param startPositionMs where to start in a video or audio (non-zero when joining mid-item)
+     * @param slide song slide to start at (songs only; null = from the beginning)
      */
-    record Play(String eventId, String itemId, java.time.Instant startAt, long startPositionMs, Transition transition)
-            implements Message {}
+    record Play(String eventId, String itemId, java.time.Instant startAt, long startPositionMs, Transition transition,
+            Integer slide) implements Message {
+
+        public Play(String eventId, String itemId, java.time.Instant startAt, long startPositionMs, Transition transition) {
+            this(eventId, itemId, startAt, startPositionMs, transition, null);
+        }
+    }
+
+    /**
+     * Show a slide of the song on screen. With the song's audio playing, the audio jumps to that
+     * slide's cue (when it has one), so lyrics and recording stay in sync.
+     */
+    record ShowSlide(String itemId, int slide) implements Message {}
 
     /** Pause the current video or audio. */
     record Pause() implements Message {}
@@ -118,12 +135,41 @@ public sealed interface Message {
     /** A media file the player must download (and verify) before showing it. */
     record MediaRef(String mediaId, MediaKind kind, String url, String sha256, long sizeBytes) {}
 
-    /** One step of an event: either a media file or a text slide rendered by the player. */
-    record PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide) {}
+    /** One step of an event: a media file, a text slide, or a song rendered by the player. */
+    record PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide, SongContent song) {
+
+        public PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide) {
+            this(itemId, type, title, media, slide, null);
+        }
+    }
+
+    /**
+     * A song as the player presents it: lyrics slides over a background, optionally with audio
+     * that advances the slides by itself.
+     *
+     * @param audio recording to play, or null (the operator advances slides)
+     * @param cues start of each slide in the audio (ms), null entries for slides without a cue;
+     *     empty without audio or timing
+     * @param background image or video behind the lyrics, or null for the default background
+     */
+    record SongContent(String title, List<SongSlide> slides, MediaRef audio, List<Long> cues, MediaRef background) {
+
+        public SongContent {
+            slides = slides == null ? List.of() : List.copyOf(slides);
+            cues = cues == null ? List.of() : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(cues));
+        }
+    }
+
+    record SongSlide(String label, boolean instrumental, List<String> lines, String cue) {
+
+        public SongSlide {
+            lines = lines == null ? List.of() : List.copyOf(lines);
+        }
+    }
 
     record Slide(String title, String body) {}
 
-    enum ItemType { MEDIA, SLIDE }
+    enum ItemType { MEDIA, SLIDE, SONG }
 
     enum PlaybackStatus {
         /** Downloading or opening the item. */

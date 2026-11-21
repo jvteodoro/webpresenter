@@ -36,6 +36,8 @@ final class PlayerController implements ServerConnection.Listener {
     private final AtomicReference<ServerConnection> connection = new AtomicReference<>();
     private final Runnable onStateChanged;
     private final Timeline positionReporter;
+    /** Advances the lyrics of a timed song from the audio position. */
+    private final Timeline songFollower;
 
     /** Rest screen most recently requested; a slower earlier download must not replace it. */
     private Message.MediaRef wantedRest;
@@ -48,6 +50,8 @@ final class PlayerController implements ServerConnection.Listener {
     private PauseTransition pendingStart;
     private boolean paused;
     private boolean paired;
+    /** Slide of the song on screen (-1: none yet, e.g. during the intro of a timed song). */
+    private int songSlide = -1;
 
     PlayerController(PresentationWindow window, PlayerIdentity identity, MediaCache cache, String serverLabel,
             Runnable onStateChanged) {
@@ -60,6 +64,8 @@ final class PlayerController implements ServerConnection.Listener {
         this.positionReporter = new Timeline(new KeyFrame(javafx.util.Duration.millis(POSITION_REPORT.toMillis()),
                 e -> reportPosition()));
         positionReporter.setCycleCount(Timeline.INDEFINITE);
+        this.songFollower = new Timeline(new KeyFrame(javafx.util.Duration.millis(100), e -> followSong()));
+        songFollower.setCycleCount(Timeline.INDEFINITE);
         window.setOnItemEnded(this::itemEnded);
         window.showInfo("Conectando ao servidor…", null, serverLabel);
     }
@@ -118,6 +124,7 @@ final class PlayerController implements ServerConnection.Listener {
                 updateRequiredMedia();
             }
             case Message.Play play -> play(play);
+            case Message.ShowSlide show -> showSlide(show);
             case Message.Pause p -> setPaused(true);
             case Message.Resume r -> setPaused(false);
             case Message.ShowRest rest -> {
@@ -163,8 +170,14 @@ final class PlayerController implements ServerConnection.Listener {
             return;
         }
         Message.PlanItem item = found.get();
+        if (item.type() == Message.ItemType.SONG) {
+            playSong(command, item, seq);
+            return;
+        }
         if (item.type() == Message.ItemType.SLIDE) {
             startAt(command.startAt(), seq, () -> {
+                songFollower.stop();
+                songSlide = -1;
                 liveItem = item;
                 paused = false;
                 window.showSlide(item.slide().title(), item.slide().body());
@@ -196,7 +209,113 @@ final class PlayerController implements ServerConnection.Listener {
         }));
     }
 
+    // ------------------------------------------------------------------ songs
+
+    /** Downloads what is missing (audio, background), then starts the song at the requested slide. */
+    private void playSong(Message.Play command, Message.PlanItem item, long seq) {
+        Message.SongContent song = item.song();
+        boolean cached = (song.audio() == null || cache.cached(song.audio()).isPresent())
+                && (song.background() == null || cache.cached(song.background()).isPresent());
+        if (!cached) {
+            report(Message.PlaybackStatus.LOADING, item.itemId(), null);
+        }
+        var audio = song.audio() == null ? java.util.concurrent.CompletableFuture.<Path>completedFuture(null) : cache.fetch(song.audio());
+        // A missing background is not worth failing the song for.
+        var background = song.background() == null ? java.util.concurrent.CompletableFuture.<Path>completedFuture(null)
+                : cache.fetch(song.background()).exceptionally(e -> null);
+        audio.thenCombine(background, (a, b) -> new Path[] {a, b}).whenComplete((files, error) -> Platform.runLater(() -> {
+            if (seq != commandSeq) {
+                return;
+            }
+            if (error != null) {
+                report(Message.PlaybackStatus.FAILED, item.itemId(), "download failed: " + error.getMessage());
+                return;
+            }
+            Runnable start = () -> {
+                liveItem = item;
+                paused = false;
+                int slide = command.slide() == null ? 0 : command.slide();
+                window.showSong(files[1], files[0], files[0] == null ? 0 : command.startPositionMs());
+                songSlide = -1;
+                if (isTimed(song)) {
+                    // Slides follow the audio; before the first cue only the background shows (intro).
+                    songFollower.playFromStart();
+                    positionReporter.playFromStart();
+                    if (command.slide() != null && command.startPositionMs() > 0) {
+                        showSongSlide(slide);
+                    }
+                    report(Message.PlaybackStatus.PLAYING, item.itemId(), null);
+                } else {
+                    showSongSlide(slide);
+                    if (song.audio() != null) {
+                        positionReporter.playFromStart();
+                    }
+                    report(song.audio() != null ? Message.PlaybackStatus.PLAYING : Message.PlaybackStatus.SHOWING,
+                            item.itemId(), null);
+                }
+            };
+            if (cached) {
+                startAt(command.startAt(), seq, start);
+            } else {
+                start.run(); // already late: start as soon as the files are here
+            }
+            onStateChanged.run();
+        }));
+    }
+
+    /** Operator moved to a slide: show it, and keep the audio in sync with it. */
+    private void showSlide(Message.ShowSlide command) {
+        if (liveItem == null || liveItem.type() != Message.ItemType.SONG || !liveItem.itemId().equals(command.itemId())) {
+            return;
+        }
+        Message.SongContent song = liveItem.song();
+        if (command.slide() < 0 || command.slide() >= song.slides().size()) {
+            return;
+        }
+        Long cue = command.slide() < song.cues().size() ? song.cues().get(command.slide()) : null;
+        if (song.audio() != null && cue != null) {
+            window.seekItem(cue);
+        }
+        showSongSlide(command.slide());
+        report(paused ? Message.PlaybackStatus.PAUSED
+                : song.audio() != null ? Message.PlaybackStatus.PLAYING : Message.PlaybackStatus.SHOWING,
+                liveItem.itemId(), null);
+    }
+
+    private void showSongSlide(int index) {
+        Message.SongSlide slide = liveItem.song().slides().get(index);
+        songSlide = index;
+        window.showSongSlide(slide.instrumental() ? List.of() : slide.lines(), slide.cue());
+    }
+
+    /** Timed songs: the slide whose cue is the latest one already reached. */
+    private void followSong() {
+        if (liveItem == null || liveItem.type() != Message.ItemType.SONG || paused) {
+            return;
+        }
+        List<Long> cues = liveItem.song().cues();
+        long position = window.itemPositionMs();
+        int target = -1;
+        for (int i = 0; i < cues.size(); i++) {
+            Long cue = cues.get(i);
+            if (cue != null && cue <= position) {
+                target = i;
+            }
+        }
+        if (target >= 0 && target != songSlide) {
+            showSongSlide(target);
+            report(Message.PlaybackStatus.PLAYING, liveItem.itemId(), null);
+            onStateChanged.run();
+        }
+    }
+
+    private static boolean isTimed(Message.SongContent song) {
+        return song.audio() != null && song.cues().stream().anyMatch(java.util.Objects::nonNull);
+    }
+
     private void present(Message.PlanItem item, Path file, long startPositionMs) {
+        songFollower.stop();
+        songSlide = -1;
         liveItem = item;
         paused = false;
         switch (item.media().kind()) {
@@ -245,6 +364,8 @@ final class PlayerController implements ServerConnection.Listener {
         long duration = window.itemDurationMs();
         liveItem = null;
         positionReporter.stop();
+        songFollower.stop();
+        songSlide = -1;
         send(new Message.PlaybackState(itemId, Message.PlaybackStatus.ENDED, duration, duration, null));
         onStateChanged.run();
     }
@@ -256,6 +377,8 @@ final class PlayerController implements ServerConnection.Listener {
         liveItem = null;
         paused = false;
         positionReporter.stop();
+        songFollower.stop();
+        songSlide = -1;
         window.showRest();
     }
 
@@ -266,12 +389,17 @@ final class PlayerController implements ServerConnection.Listener {
     }
 
     private void report(Message.PlaybackStatus status, String itemId, String detail) {
-        boolean media = liveItem != null && isTimeBased(liveItem) && itemId != null && itemId.equals(liveItem.itemId());
+        boolean current = liveItem != null && itemId != null && itemId.equals(liveItem.itemId());
+        boolean media = current && isTimeBased(liveItem);
+        Integer slide = current && liveItem.type() == Message.ItemType.SONG && songSlide >= 0 ? songSlide : null;
         send(new Message.PlaybackState(itemId, status, media ? window.itemPositionMs() : 0,
-                media ? window.itemDurationMs() : 0, detail));
+                media ? window.itemDurationMs() : 0, detail, slide));
     }
 
     private static boolean isTimeBased(Message.PlanItem item) {
+        if (item.type() == Message.ItemType.SONG) {
+            return item.song() != null && item.song().audio() != null;
+        }
         return item.type() == Message.ItemType.MEDIA && item.media() != null
                 && (item.media().kind() == Message.MediaKind.VIDEO || item.media().kind() == Message.MediaKind.AUDIO);
     }
@@ -316,8 +444,12 @@ final class PlayerController implements ServerConnection.Listener {
     /** Rest screen plus every media item of the plan must be in the cache. */
     private void updateRequiredMedia() {
         List<Message.MediaRef> eventMedia = plan.items().stream()
-                .filter(i -> i.type() == Message.ItemType.MEDIA && i.media() != null)
-                .map(Message.PlanItem::media)
+                .flatMap(i -> switch (i.type()) {
+                    case MEDIA -> java.util.stream.Stream.ofNullable(i.media());
+                    case SONG -> i.song() == null ? java.util.stream.Stream.<Message.MediaRef>empty()
+                            : java.util.stream.Stream.of(i.song().audio(), i.song().background()).filter(java.util.Objects::nonNull);
+                    case SLIDE -> java.util.stream.Stream.<Message.MediaRef>empty();
+                })
                 .toList();
         preCache.require(plan.eventId(), wantedRest, eventMedia);
     }
@@ -335,6 +467,7 @@ final class PlayerController implements ServerConnection.Listener {
 
     void close() {
         positionReporter.stop();
+        songFollower.stop();
         preCache.close();
     }
 }

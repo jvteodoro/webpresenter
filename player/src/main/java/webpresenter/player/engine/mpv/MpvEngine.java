@@ -144,6 +144,11 @@ public final class MpvEngine implements VideoEngine {
     }
 
     @Override
+    public void seek(long positionMs) {
+        command("seek", String.format(java.util.Locale.ROOT, "%.3f", positionMs / 1000.0), "absolute+exact");
+    }
+
+    @Override
     public void setPaused(boolean paused) {
         setProperty("pause", paused ? "yes" : "no");
     }

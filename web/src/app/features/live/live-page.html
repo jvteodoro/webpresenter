@@ -28,6 +28,16 @@
         <mat-icon class="now-icon">{{ icon(onScreen()) }}</mat-icon>
         <h2 class="now-title">{{ onScreen()?.title ?? 'Tela de descanso' }}</h2>
       </div>
+      @if (song(); as current) {
+        <div class="now-lyrics" aria-label="Letra no telão">
+          @if (songSlide(); as sl) {
+            @if (sl.cue) { <span class="cue">{{ sl.cue }}</span> }
+            @for (line of sl.lines; track $index) { <span>{{ line }}</span> } @empty { <span class="muted">♪ instrumental</span> }
+          } @else {
+            <span class="muted">Introdução</span>
+          }
+        </div>
+      }
       @if (progress(); as p) {
         <div class="progress">
           <mat-progress-bar mode="determinate" [value]="p.percent" />
@@ -38,7 +48,12 @@
 
     <article class="next" aria-label="A seguir">
       <span class="label">A seguir</span>
-      @if (next(); as n) {
+      @if (nextSlide(); as ns) {
+        <div class="next-main">
+          <mat-icon>lyrics</mat-icon>
+          <span class="next-title">{{ slideText(ns) }}</span>
+        </div>
+      } @else if (next(); as n) {
         <div class="next-main">
           <mat-icon>{{ icon(n) }}</mat-icon>
           <span class="next-title">{{ n.title }}</span>
@@ -70,6 +85,27 @@
     </section>
   }
 
+  @if (song(); as current) {
+    <section class="card song-slides" aria-label="Slides da música">
+      <h2 class="section-title">{{ current.title }} · {{ current.timed ? 'letra sincronizada' : 'avanço manual' }}</h2>
+      <ol class="slides">
+        @for (sl of current.slides; track $index; let i = $index) {
+          @if (i === 0 || current.slides[i - 1].label !== sl.label) {
+            <li class="slide-label" aria-hidden="true">{{ sl.label }}</li>
+          }
+          <li>
+            <button class="slide" type="button" [class.current]="i === s.currentSlide"
+                    [disabled]="!canControl() || busy()" [attr.aria-current]="i === s.currentSlide ? 'true' : null"
+                    (click)="goToSlide(i)">
+              @if (sl.cue) { <span class="cue">{{ sl.cue }}</span> }
+              <span class="slide-text">{{ slideText(sl) }}</span>
+            </button>
+          </li>
+        }
+      </ol>
+    </section>
+  }
+
   <div class="columns">
     <section class="card">
       <h2 class="section-title">Ordem do evento</h2>
@@ -88,7 +124,9 @@
               <mat-icon class="kind">{{ icon(item) }}</mat-icon>
               <span class="item-title">{{ item.title }}</span>
               <span class="item-meta">
-                @if (item.type === 'SLIDE') { Slide } @else { {{ item.durationMs | duration }} }
+                @if (item.type === 'SLIDE') { Slide }
+                @else if (item.type === 'SONG') { Música@if (item.durationMs) { · {{ item.durationMs | duration }} } }
+                @else { {{ item.durationMs | duration }} }
               </span>
               @if (i === s.currentIndex && s.status !== 'REST') {
                 <mat-icon class="on-air" aria-hidden="true">cast</mat-icon>

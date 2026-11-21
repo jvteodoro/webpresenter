@@ -10,18 +10,22 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import webpresenter.server.library.MediaCatalog;
 import webpresenter.server.library.MediaUsage;
+import webpresenter.server.songs.SongCatalog;
 
 @Service
 class PlanningService implements PlannedEvents, MediaUsage {
 
     private final PlannedEventRepository repository;
     private final MediaCatalog catalog;
+    private final SongCatalog songs;
     private final ApplicationEventPublisher events;
     private final Clock clock = Clock.systemUTC();
 
-    PlanningService(PlannedEventRepository repository, MediaCatalog catalog, ApplicationEventPublisher events) {
+    PlanningService(PlannedEventRepository repository, MediaCatalog catalog, SongCatalog songs,
+            ApplicationEventPublisher events) {
         this.repository = repository;
         this.catalog = catalog;
+        this.songs = songs;
         this.events = events;
     }
 
@@ -79,6 +83,34 @@ class PlanningService implements PlannedEvents, MediaUsage {
         return loaded(event);
     }
 
+    /** Adds a song; {@code recordingId} null presents the lyrics without audio. */
+    @Transactional
+    PlannedEvent addSong(UUID id, UUID songId, UUID recordingId, Integer position) {
+        PlannedEvent event = find(id);
+        requireRecording(songId, recordingId);
+        event.addItem(EventItem.song(event, songId, recordingId), position, clock.instant());
+        changed(event);
+        return loaded(event);
+    }
+
+    @Transactional
+    PlannedEvent chooseRecording(UUID id, UUID itemId, UUID recordingId) {
+        PlannedEvent event = find(id);
+        EventItem item = event.item(itemId);
+        requireRecording(item.songId(), recordingId);
+        item.chooseRecording(recordingId);
+        event.touch(clock.instant());
+        changed(event);
+        return loaded(event);
+    }
+
+    private void requireRecording(UUID songId, UUID recordingId) {
+        var song = songs.find(songId).orElseThrow(() -> new InvalidRequestException("song " + songId + " does not exist"));
+        if (recordingId != null && song.recording(recordingId).isEmpty()) {
+            throw new InvalidRequestException("recording " + recordingId + " is not a recording of this song");
+        }
+    }
+
     @Transactional
     PlannedEvent editSlide(UUID id, UUID itemId, String title, String body) {
         PlannedEvent event = find(id);
@@ -132,7 +164,8 @@ class PlanningService implements PlannedEvents, MediaUsage {
     @Transactional(readOnly = true)
     public Optional<EventPlan> current() {
         return repository.findByCurrentTrue().map(e -> new EventPlan(e.id(), e.title(), e.items().stream()
-                .map(i -> new EventPlan.Item(i.id(), i.type(), i.mediaId(), i.slideTitle(), i.slideBody()))
+                .map(i -> new EventPlan.Item(i.id(), i.type(), i.mediaId(), i.slideTitle(), i.slideBody(), i.songId(),
+                        i.recordingId()))
                 .toList()));
     }
 

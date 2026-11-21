@@ -4,7 +4,7 @@ Design of songs in webpresenter: what a song is, how its lyrics, slides, recordi
 are modelled, how the LouvorJA export is converted, and how the future automatic pipeline
 (audio → lyrics, timing and backing track) plugs in without reshaping anything.
 
-Status: design, to be implemented in the phases at the end of this document.
+Status: phases 1–5 implemented (see the end of this document); the pipeline is prepared, not built.
 
 ## Goals
 
@@ -104,6 +104,20 @@ a new item, as people expect).
 - Live page: the slide sequence of the song on screen, current slide highlighted, click to jump
   (also during playback, re-syncing the audio to that cue). Musicians see the lyrics and what is next.
 - Theme (font, size, colour, shadow, position, safe margins) per player, editable in Dispositivos.
+
+### As implemented (phase 5)
+
+- Event items of type `SONG` reference a song and a recording (or none). Players receive the whole
+  song in `PREPARE` (slides, audio, cues, background) and pre-cache audio and background.
+- Starting a song (Próximo, or a click on the item) plays it **from the beginning**: with timing,
+  only the background shows until the first cue (the intro). Choosing a slide (`SLIDE` command,
+  click in the live page) shows it and jumps the audio to its cue.
+- Inside a song, Próximo/Anterior move slide by slide; after the last slide Próximo goes to the
+  next item. Timed songs advance on the players; the server follows their reports so every web
+  client shows the slide on screen. Pause/continue work as for any audio.
+- A player joining during a song starts at the current slide and audio position.
+- Song backgrounds cover the whole output (cropped, they are decorative); the text is white with
+  a shadow over a darkened background. Not yet: video backgrounds, configurable theme, chords.
 
 ## Pipeline readiness (not implemented now)
 

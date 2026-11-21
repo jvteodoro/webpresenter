@@ -8,7 +8,7 @@ import { LiveAction, LiveState } from './live';
 export class LiveApi {
   private readonly http = inject(HttpClient);
 
-  command(action: LiveAction, itemId?: string): Observable<LiveState> {
-    return this.http.post<LiveState>(`${environment.apiUrl}/api/live/commands`, { action, itemId });
+  command(action: LiveAction, itemId?: string, slide?: number): Observable<LiveState> {
+    return this.http.post<LiveState>(`${environment.apiUrl}/api/live/commands`, { action, itemId, slide });
   }
 }

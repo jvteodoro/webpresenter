@@ -88,6 +88,7 @@
       <h2>Ordem do evento</h2>
       @if (canEdit()) {
         <div class="add">
+          <button mat-stroked-button (click)="addSong()" [disabled]="saving()"><mat-icon>queue_music</mat-icon>Adicionar música</button>
           <button mat-stroked-button (click)="addMedia()" [disabled]="saving()"><mat-icon>video_library</mat-icon>Adicionar mídia</button>
           <button mat-stroked-button (click)="addSlide()" [disabled]="saving()"><mat-icon>text_fields</mat-icon>Adicionar slide</button>
         </div>
@@ -113,12 +114,34 @@
               @if (item.slide?.body) {
                 <span class="item-sub">{{ preview(item.slide!.body) }}</span>
               }
+              @if (item.song) {
+                <span class="item-sub">{{ songMode(item) }} · {{ item.song.slideCount }} slides</span>
+              }
             </span>
             <span class="item-meta">
-              @if (item.type === 'SLIDE') { Slide } @else { {{ item.media?.durationMs | duration }} }
+              @if (item.type === 'SLIDE') { Slide }
+              @else if (item.type === 'SONG') { {{ item.song?.durationMs | duration }} }
+              @else { {{ item.media?.durationMs | duration }} }
             </span>
             @if (canEdit()) {
               <span class="item-actions">
+ @if (item.type === 'SONG' && item.song) {
+                  <button mat-icon-button aria-label="Gravação da música" matTooltip="Como apresentar" [disabled]="saving()" [matMenuTriggerFor]="recordingMenu">
+                    <mat-icon>tune</mat-icon>
+                  </button>
+                  <mat-menu #recordingMenu="matMenu" xPosition="before">
+                    @for (r of item.song.recordings; track r.id) {
+                      <button mat-menu-item (click)="chooseRecording(item, r.id)">
+                        <mat-icon>{{ r.id === item.song.recordingId ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon>
+                        {{ recordingLabels[r.kind] }}{{ r.timed ? '' : ' (sem tempos)' }}
+                      </button>
+                    }
+                    <button mat-menu-item (click)="chooseRecording(item, null)">
+                      <mat-icon>{{ item.song.recordingId ? 'radio_button_unchecked' : 'radio_button_checked' }}</mat-icon>
+                      Sem áudio
+                    </button>
+                  </mat-menu>
+                }
                 @if (item.type === 'SLIDE') {
                   <button mat-icon-button aria-label="Editar slide" matTooltip="Editar slide" [disabled]="saving()" (click)="editSlide(item)">
                     <mat-icon>edit</mat-icon>

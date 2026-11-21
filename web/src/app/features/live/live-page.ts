@@ -7,7 +7,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { CurrentUser } from '../../core/auth/current-user';
-import { LiveAction, LiveItem, LivePlayer, isTimeBased } from '../../core/live/live';
+import { LiveAction, LiveItem, LivePlayer, LiveSlide, isTimeBased } from '../../core/live/live';
 import { LiveApi } from '../../core/live/live-api';
 import { LiveStream } from '../../core/live/live-stream';
 import { MEDIA_KIND_ICONS } from '../../core/media/media';
@@ -17,7 +17,7 @@ const STATUS_LABELS = {
   REST: 'Tela de descanso',
   PLAYING: 'Tocando',
   PAUSED: 'Pausado',
-  SHOWING: 'No telão',
+  SHOWING: 'Exibindo',
 } as const;
 
 const PLAYBACK_LABELS: Record<string, string> = {
@@ -65,6 +65,23 @@ export class LivePage implements OnInit, OnDestroy {
     const s = this.state();
     return s ? (s.items[s.currentIndex + 1] ?? null) : null;
   });
+  /** The song on screen, if the current item is one. */
+  protected readonly song = computed(() => {
+    const item = this.onScreen();
+    return item?.type === 'SONG' ? item : null;
+  });
+  /** Lyrics on screen (null before the first cue of a timed song: the intro). */
+  protected readonly songSlide = computed<LiveSlide | null>(() => {
+    const song = this.song();
+    const index = this.state()?.currentSlide ?? -1;
+    return song && index >= 0 ? (song.slides[index] ?? null) : null;
+  });
+  /** Inside a song, the next slide comes before the next item. */
+  protected readonly nextSlide = computed<LiveSlide | null>(() => {
+    const song = this.song();
+    const index = this.state()?.currentSlide ?? -1;
+    return song ? (song.slides[index + 1] ?? null) : null;
+  });
   protected readonly statusLabel = computed(() => STATUS_LABELS[this.state()?.status ?? 'REST']);
   protected readonly canPause = computed(() => isTimeBased(this.onScreen()));
 
@@ -102,6 +119,9 @@ export class LivePage implements OnInit, OnDestroy {
     if (!item) {
       return 'wallpaper';
     }
+    if (item.type === 'SONG') {
+      return 'queue_music';
+    }
     return item.type === 'SLIDE' ? 'text_fields' : item.kind ? MEDIA_KIND_ICONS[item.kind] : 'help';
   }
 
@@ -112,12 +132,12 @@ export class LivePage implements OnInit, OnDestroy {
     return p.playback ? PLAYBACK_LABELS[p.playback] : 'Conectado';
   }
 
-  protected send(action: LiveAction, itemId?: string): void {
+  protected send(action: LiveAction, itemId?: string, slide?: number): void {
     if (!this.canControl() || this.busy()) {
       return;
     }
     this.busy.set(true);
-    this.api.command(action, itemId).subscribe({
+    this.api.command(action, itemId, slide).subscribe({
       next: (state) => {
         this.stream.apply(state);
         this.busy.set(false);
@@ -127,6 +147,17 @@ export class LivePage implements OnInit, OnDestroy {
         this.snackBar.open(e.error?.detail ?? `Comando não executado (${e.status}).`, 'OK', { duration: 4000 });
       },
     });
+  }
+
+  protected goToSlide(index: number): void {
+    const song = this.song() ?? this.current();
+    if (song?.type === 'SONG') {
+      this.send('SLIDE', song.id, index);
+    }
+  }
+
+  protected slideText(slide: LiveSlide): string {
+    return slide.instrumental || slide.lines.length === 0 ? '♪ instrumental' : slide.lines.join(' / ');
   }
 
   protected togglePause(): void {

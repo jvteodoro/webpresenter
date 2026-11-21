@@ -24,6 +24,7 @@ import webpresenter.server.library.MediaKind;
 import webpresenter.server.planning.CurrentEventChanged;
 import webpresenter.server.planning.ItemType;
 import webpresenter.server.planning.PlannedEvents;
+import webpresenter.server.songs.SongCatalog;
 
 /** Device registry: pairing, approval, configuration, and the messages that keep players in sync. */
 @Service
@@ -36,16 +37,19 @@ class DeviceService implements Players {
     private final PlayerSessions sessions;
     private final MediaCatalog catalog;
     private final PlannedEvents plannedEvents;
+    private final SongCatalog songs;
     private final JsonMapper json;
     private final org.springframework.context.ApplicationEventPublisher events;
     private final Clock clock = Clock.systemUTC();
 
     DeviceService(DeviceRepository repository, PlayerSessions sessions, MediaCatalog catalog,
-            PlannedEvents plannedEvents, JsonMapper json, org.springframework.context.ApplicationEventPublisher events) {
+            PlannedEvents plannedEvents, SongCatalog songs, JsonMapper json,
+            org.springframework.context.ApplicationEventPublisher events) {
         this.repository = repository;
         this.sessions = sessions;
         this.catalog = catalog;
         this.plannedEvents = plannedEvents;
+        this.songs = songs;
         this.json = json;
         this.events = events;
     }
@@ -253,6 +257,21 @@ class DeviceService implements Players {
     }
 
     private Optional<Message.PlanItem> planItem(PlannedEvents.EventPlan.Item item) {
+        if (item.type() == ItemType.SONG) {
+            return songs.find(item.songId()).map(plan -> {
+                var recording = item.recordingId() == null ? null : plan.recording(item.recordingId()).orElse(null);
+                Message.MediaRef audio = recording == null ? null
+                        : catalog.find(recording.mediaId()).map(this::mediaRef).orElse(null);
+                Message.MediaRef background = plan.backgroundMediaId() == null ? null
+                        : catalog.find(plan.backgroundMediaId()).map(this::mediaRef).orElse(null);
+                var slides = plan.slides().stream()
+                        .map(sl -> new Message.SongSlide(sl.partLabel(), sl.instrumental(), sl.lines(), sl.cue()))
+                        .toList();
+                var cues = audio == null || recording == null ? java.util.List.<Long>of() : recording.cueStartMs();
+                return new Message.PlanItem(item.id().toString(), Message.ItemType.SONG, plan.title(), null, null,
+                        new Message.SongContent(plan.title(), slides, audio, cues, background));
+            });
+        }
         if (item.type() == ItemType.SLIDE) {
             return Optional.of(new Message.PlanItem(item.id().toString(), Message.ItemType.SLIDE, item.slideTitle(),
                     null, new Message.Slide(item.slideTitle(), item.slideBody())));

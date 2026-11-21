@@ -13,6 +13,7 @@ public interface PlannedEvents {
     /** An event as players need it: ordered items with media ids or slide text. */
     record EventPlan(UUID id, String title, List<Item> items) {
 
-        public record Item(UUID id, ItemType type, UUID mediaId, String slideTitle, String slideBody) {}
+        public record Item(UUID id, ItemType type, UUID mediaId, String slideTitle, String slideBody, UUID songId,
+                UUID recordingId) {}
     }
 }

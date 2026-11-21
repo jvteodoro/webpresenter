@@ -17,7 +17,7 @@ import webpresenter.server.library.MediaKind;
 import webpresenter.server.library.MediaUsage;
 
 @Service
-class SongService implements MediaUsage {
+class SongService implements MediaUsage, SongCatalog {
 
     private final SongRepository songs;
     private final SongCollectionRepository collections;
@@ -47,7 +47,7 @@ class SongService implements MediaUsage {
 
     @Transactional(readOnly = true)
     Song get(UUID id) {
-        return load(find(id));
+        return load(findSong(id));
     }
 
     @Transactional(readOnly = true)
@@ -83,19 +83,19 @@ class SongService implements MediaUsage {
 
     @Transactional
     Song update(UUID id, SongInput input) {
-        Song song = find(id);
+        Song song = findSong(id);
         apply(song, input);
         return load(song);
     }
 
     @Transactional
     void delete(UUID id) {
-        songs.delete(find(id));
+        songs.delete(findSong(id));
     }
 
     @Transactional
     Song addRecording(UUID songId, RecordingInput input) {
-        Song song = find(songId);
+        Song song = findSong(songId);
         requireMedia(input.mediaId(), MediaKind.AUDIO, MediaKind.VIDEO);
         Recording recording = song.addRecording(input.kind(), input.mediaId(),
                 input.source() == null ? Source.MANUAL : input.source());
@@ -108,7 +108,7 @@ class SongService implements MediaUsage {
 
     @Transactional
     Song setTiming(UUID songId, UUID recordingId, Timing timing) {
-        Song song = find(songId);
+        Song song = findSong(songId);
         song.recording(recordingId).setTiming(timing == null ? null : timingJson(song, timing));
         song.touch(clock.instant());
         return load(song);
@@ -116,7 +116,7 @@ class SongService implements MediaUsage {
 
     @Transactional
     Song removeRecording(UUID songId, UUID recordingId) {
-        Song song = find(songId);
+        Song song = findSong(songId);
         song.removeRecording(recordingId);
         song.touch(clock.instant());
         return load(song);
@@ -150,6 +150,32 @@ class SongService implements MediaUsage {
             }
         }
         return load(song);
+    }
+
+    // ------------------------------------------------------------------ SongCatalog
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<SongPlan> find(java.util.UUID songId) {
+        return songs.findById(songId).map(song -> {
+            List<Lyrics.SequenceSlide> sequence = lyrics(song).slideSequence();
+            List<PlanSlide> slides = sequence.stream()
+                    .map(s -> new PlanSlide(s.partLabel(), s.kind() == Lyrics.PartKind.INSTRUMENTAL, s.lines(), s.cue()))
+                    .toList();
+            List<PlanRecording> recordings = song.recordings().stream().map(r -> {
+                Timing timing = timing(r);
+                List<Long> cues = new ArrayList<>();
+                if (timing != null && java.util.Objects.equals(timing.lyricsVersion(), song.lyricsVersion())) {
+                    java.util.Map<Integer, Long> byIndex = new java.util.HashMap<>();
+                    timing.cues().forEach(c -> byIndex.put(c.slide(), c.startMs()));
+                    for (int i = 0; i < sequence.size(); i++) {
+                        cues.add(byIndex.get(i));
+                    }
+                }
+                return new PlanRecording(r.id(), r.kind(), r.mediaId(), cues);
+            }).toList();
+            return new SongPlan(song.id(), song.title(), slides, recordings, song.backgroundMediaId());
+        });
     }
 
     // ------------------------------------------------------------------ MediaUsage
@@ -251,7 +277,7 @@ class SongService implements MediaUsage {
         return song;
     }
 
-    private Song find(UUID id) {
+    private Song findSong(UUID id) {
         return songs.findById(id).orElseThrow(() -> new NotFoundException("song " + id + " not found"));
     }
 

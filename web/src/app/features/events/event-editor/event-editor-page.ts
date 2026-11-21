@@ -22,6 +22,7 @@ import { FileSizePipe } from '../../../shared/pipes/file-size.pipe';
 import { EventDialog, EventDialogData } from '../dialogs/event-dialog';
 import { MediaPickerDialog } from '../dialogs/media-picker-dialog';
 import { SlideDialog } from '../dialogs/slide-dialog';
+import { SongChoice, SongPickerDialog } from '../dialogs/song-picker-dialog';
 
 const READINESS_REFRESH_MS = 2000;
 
@@ -63,8 +64,9 @@ export class EventEditorPage {
 
   protected readonly canEdit = computed(() => this.currentUser.canEditEvents());
   protected readonly totalDurationMs = computed(() =>
-    (this.event()?.items ?? []).reduce((sum, item) => sum + (item.media?.durationMs ?? 0), 0),
+    (this.event()?.items ?? []).reduce((sum, item) => sum + (item.media?.durationMs ?? item.song?.durationMs ?? 0), 0),
   );
+  protected readonly recordingLabels: Record<string, string> = { SUNG: 'Cantado', PLAYBACK: 'Playback', OTHER: 'Outra gravação' };
   /** Players ready for this event, among the online ones. */
   protected readonly readyCount = computed(() => {
     const id = this.event()?.id;
@@ -86,7 +88,22 @@ export class EventEditorPage {
   // ------------------------------------------------------------------ display helpers
 
   protected icon(item: EventItem): string {
+    if (item.type === 'SONG') {
+      return 'queue_music';
+    }
     return item.type === 'SLIDE' ? 'text_fields' : item.media?.kind ? MEDIA_KIND_ICONS[item.media.kind] : 'help';
+  }
+
+  /** "Cantado · letra sincronizada", "Sem áudio · avanço manual". */
+  protected songMode(item: EventItem): string {
+    const song = item.song;
+    if (!song) {
+      return '';
+    }
+    if (!song.recordingKind) {
+      return 'Sem áudio · avanço manual';
+    }
+    return `${this.recordingLabels[song.recordingKind]} · ${song.timed ? 'letra sincronizada' : 'avanço manual'}`;
   }
 
   /** One-line preview of a slide's text. */
@@ -129,6 +146,19 @@ export class EventEditorPage {
       .subscribe((ids) =>
         this.run(from(ids).pipe(concatMap((mediaId) => this.api.addMedia(id, mediaId)), last()), 'adicionar mídia'),
       );
+  }
+
+  protected addSong(): void {
+    const id = this.id();
+    this.dialog
+      .open<SongPickerDialog, void, SongChoice>(SongPickerDialog, { maxWidth: '95vw' })
+      .afterClosed()
+      .pipe(filter((choice): choice is SongChoice => !!choice))
+      .subscribe((choice) => this.run(this.api.addSong(id, choice.songId, choice.recordingId), 'adicionar música'));
+  }
+
+  protected chooseRecording(item: EventItem, recordingId: string | null): void {
+    this.run(this.api.chooseRecording(this.id(), item.id, recordingId), 'trocar a gravação');
   }
 
   protected addSlide(): void {

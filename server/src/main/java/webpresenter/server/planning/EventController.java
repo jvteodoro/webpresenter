@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import webpresenter.server.library.MediaCatalog;
 import webpresenter.server.library.MediaKind;
+import webpresenter.server.songs.SongCatalog;
 
 /** Event planning. Everyone signed in can read; leaders, AV technicians and admins can edit. */
 @RestController
@@ -36,10 +37,12 @@ class EventController {
 
     private final PlanningService planning;
     private final MediaCatalog catalog;
+    private final SongCatalog songs;
 
-    EventController(PlanningService planning, MediaCatalog catalog) {
+    EventController(PlanningService planning, MediaCatalog catalog, SongCatalog songs) {
         this.planning = planning;
         this.catalog = catalog;
+        this.songs = songs;
     }
 
     @GetMapping
@@ -88,7 +91,20 @@ class EventController {
                 }
                 yield planning.addSlide(id, request.slideTitle(), request.slideBody(), request.position());
             }
+            case SONG -> {
+                if (request.songId() == null) {
+                    throw new PlanningService.InvalidRequestException("songId is required for songs");
+                }
+                yield planning.addSong(id, request.songId(), request.recordingId(), request.position());
+            }
         });
+    }
+
+    /** Chooses which recording of the song plays (null: lyrics only). */
+    @PutMapping("/{id}/items/{itemId}/recording")
+    @PreAuthorize(CAN_EDIT)
+    EventDetail chooseRecording(@PathVariable UUID id, @PathVariable UUID itemId, @RequestBody RecordingChoice choice) {
+        return detail(planning.chooseRecording(id, itemId, choice.recordingId()));
     }
 
     @PutMapping("/{id}/items/{itemId}")
@@ -124,13 +140,28 @@ class EventController {
     }
 
     private EventDetail detail(PlannedEvent event) {
-        List<ItemView> items = event.items().stream().map(i -> {
-            MediaView media = i.type() != ItemType.MEDIA ? null : catalog.find(i.mediaId())
-                    .map(m -> new MediaView(m.id(), m.title(), m.kind(), m.durationMs()))
-                    .orElse(new MediaView(i.mediaId(), "(mídia removida)", null, null));
-            String title = i.type() == ItemType.SLIDE ? i.slideTitle() : media.title();
-            SlideView slide = i.type() == ItemType.SLIDE ? new SlideView(i.slideTitle(), i.slideBody()) : null;
-            return new ItemView(i.id(), i.type(), title, media, slide);
+        List<ItemView> items = event.items().stream().map(i -> switch (i.type()) {
+            case MEDIA -> {
+                MediaView media = catalog.find(i.mediaId())
+                        .map(m -> new MediaView(m.id(), m.title(), m.kind(), m.durationMs()))
+                        .orElse(new MediaView(i.mediaId(), "(mídia removida)", null, null));
+                yield new ItemView(i.id(), i.type(), media.title(), media, null, null);
+            }
+            case SLIDE -> new ItemView(i.id(), i.type(), i.slideTitle(), null, new SlideView(i.slideTitle(), i.slideBody()), null);
+            case SONG -> {
+                SongView song = songs.find(i.songId()).map(plan -> {
+                    var recording = i.recordingId() == null ? null : plan.recording(i.recordingId()).orElse(null);
+                    Long duration = recording == null ? null : catalog.find(recording.mediaId()).map(m -> m.durationMs()).orElse(null);
+                    return new SongView(plan.id(), plan.title(), plan.slides().size(),
+                            recording == null ? null : recording.id(), recording == null ? null : recording.kind().name(),
+                            recording != null && recording.cueStartMs().stream().anyMatch(java.util.Objects::nonNull),
+                            duration, plan.recordings().stream()
+                                    .map(r -> new RecordingOption(r.id(), r.kind().name(),
+                                            r.cueStartMs().stream().anyMatch(java.util.Objects::nonNull)))
+                                    .toList());
+                }).orElse(new SongView(i.songId(), "(música removida)", 0, null, null, false, null, List.of()));
+                yield new ItemView(i.id(), i.type(), song.title(), null, null, song);
+            }
         }).toList();
         return new EventDetail(event.id(), event.title(), event.startsAt(), event.current(), items,
                 event.createdBy(), event.updatedAt());
@@ -141,7 +172,9 @@ class EventController {
     record EventRequest(@NotBlank @Size(max = 200) String title, Instant startsAt) {}
 
     record NewItemRequest(@NotNull ItemType type, UUID mediaId, @Size(max = 200) String slideTitle,
-            @Size(max = 4000) String slideBody, Integer position) {}
+            @Size(max = 4000) String slideBody, UUID songId, UUID recordingId, Integer position) {}
+
+    record RecordingChoice(UUID recordingId) {}
 
     record SlideRequest(@NotBlank @Size(max = 200) String slideTitle, @Size(max = 4000) String slideBody) {}
 
@@ -156,7 +189,13 @@ class EventController {
     record EventDetail(UUID id, String title, Instant startsAt, boolean current, List<ItemView> items,
             String createdBy, Instant updatedAt) {}
 
-    record ItemView(UUID id, ItemType type, String title, MediaView media, SlideView slide) {}
+    record ItemView(UUID id, ItemType type, String title, MediaView media, SlideView slide, SongView song) {}
+
+    /** A song item: chosen recording (null: lyrics only) and the recordings available. */
+    record SongView(UUID id, String title, int slideCount, UUID recordingId, String recordingKind, boolean timed,
+            Long durationMs, List<RecordingOption> recordings) {}
+
+    record RecordingOption(UUID id, String kind, boolean timed) {}
 
     record MediaView(UUID id, String title, MediaKind kind, Long durationMs) {}
 

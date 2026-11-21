@@ -29,6 +29,9 @@ public interface VideoEngine extends AutoCloseable {
 
     void setPaused(boolean paused);
 
+    /** Jumps to an absolute position in the loaded media. */
+    void seek(long positionMs);
+
     /** Current playback position, or 0 if unknown. */
     long positionMs();
 
