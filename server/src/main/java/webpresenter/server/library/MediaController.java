@@ -40,15 +40,23 @@ class MediaController {
     @PostMapping(consumes = "multipart/form-data")
     @PreAuthorize(CAN_MANAGE)
     ResponseEntity<MediaResponse> upload(@RequestParam("file") MultipartFile file,
-            @RequestParam(value = "title", required = false) String title, Authentication user) throws IOException {
-        MediaAsset asset = library.upload(file.getInputStream(), file.getOriginalFilename(), file.getContentType(),
-                title, user.getName());
-        return ResponseEntity.created(URI.create("/api/media/" + asset.id())).body(MediaResponse.of(asset));
+            @RequestParam(value = "title", required = false) String title,
+            @RequestParam(value = "purpose", defaultValue = "GENERAL") MediaPurpose purpose,
+            Authentication user) throws IOException {
+        var uploaded = library.upload(file.getInputStream(), file.getOriginalFilename(), file.getContentType(),
+                title, user.getName(), purpose);
+        MediaResponse body = MediaResponse.of(uploaded.asset());
+        // Same content already stored: 200 with the existing asset instead of a duplicate.
+        return uploaded.created()
+                ? ResponseEntity.created(URI.create("/api/media/" + uploaded.asset().id())).body(body)
+                : ResponseEntity.ok(body);
     }
 
+    /** Library files; GENERAL only by default, {@code purpose=ALL} for everything. */
     @GetMapping
-    List<MediaResponse> list() {
-        return library.list().stream().map(MediaResponse::of).toList();
+    List<MediaResponse> list(@RequestParam(value = "purpose", defaultValue = "GENERAL") String purpose) {
+        MediaPurpose filter = "ALL".equalsIgnoreCase(purpose) ? null : MediaPurpose.valueOf(purpose.toUpperCase());
+        return library.list(filter).stream().map(MediaResponse::of).toList();
     }
 
     @GetMapping("/{id}")
@@ -78,12 +86,13 @@ class MediaController {
     record RenameRequest(@NotBlank @Size(max = 300) String title) {}
 
     record MediaResponse(UUID id, String title, String originalFilename, MediaKind kind, String contentType,
-            long sizeBytes, String sha256, Long durationMs, Integer width, Integer height, Instant createdAt,
-            String createdBy) {
+            long sizeBytes, String sha256, Long durationMs, Integer width, Integer height, MediaPurpose purpose,
+            Instant createdAt, String createdBy) {
 
         static MediaResponse of(MediaAsset a) {
             return new MediaResponse(a.id(), a.title(), a.originalFilename(), a.kind(), a.contentType(),
-                    a.sizeBytes(), a.sha256(), a.durationMs(), a.width(), a.height(), a.createdAt(), a.createdBy());
+                    a.sizeBytes(), a.sha256(), a.durationMs(), a.width(), a.height(), a.purpose(), a.createdAt(),
+                    a.createdBy());
         }
     }
 }

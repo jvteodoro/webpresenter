@@ -57,15 +57,33 @@ class MediaLibraryService implements MediaCatalog {
      * Adds a file to the library: copies it to a temporary file while hashing it, inspects it
      * with ffprobe, stores it, and records its metadata.
      */
+    /** Result of an upload: the asset, and whether it was created or already existed (same content). */
+    record Uploaded(MediaAsset asset, boolean created) {}
+
     @Transactional
     MediaAsset upload(InputStream content, String originalFilename, String declaredContentType, String title,
             String uploadedBy) {
+        return upload(content, originalFilename, declaredContentType, title, uploadedBy, MediaPurpose.GENERAL).asset();
+    }
+
+    /**
+     * Adds a file to the library: copies it to a temporary file while hashing it, returns the
+     * existing asset if the same content is already stored, otherwise inspects it with ffprobe,
+     * stores it and records its metadata.
+     */
+    @Transactional
+    Uploaded upload(InputStream content, String originalFilename, String declaredContentType, String title,
+            String uploadedBy, MediaPurpose purpose) {
         String filename = sanitizeFilename(originalFilename);
         Path temp = null;
         try {
             temp = Files.createTempFile("webpresenter-upload-", suffix(filename));
             String sha256 = copyAndHash(content, temp);
             long size = Files.size(temp);
+            var existing = repository.findFirstBySha256AndSizeBytes(sha256, size);
+            if (existing.isPresent()) {
+                return new Uploaded(existing.get(), false);
+            }
             MediaProbe.ProbeResult info = probe.probe(temp)
                     .orElseThrow(() -> new UnsupportedMediaException(filename));
 
@@ -75,9 +93,10 @@ class MediaLibraryService implements MediaCatalog {
             store.put(key, temp, contentType);
 
             MediaAsset asset = new MediaAsset(id, titleOrDefault(title, filename), filename, info.kind(), contentType,
-                    size, sha256, info.durationMs(), info.width(), info.height(), key, Instant.now(clock), uploadedBy);
+                    size, sha256, info.durationMs(), info.width(), info.height(), key, Instant.now(clock), uploadedBy,
+                    purpose);
             try {
-                return repository.saveAndFlush(asset);
+                return new Uploaded(repository.saveAndFlush(asset), true);
             } catch (RuntimeException e) {
                 store.delete(key); // keep store and database consistent
                 throw e;
@@ -90,8 +109,9 @@ class MediaLibraryService implements MediaCatalog {
     }
 
     @Transactional(readOnly = true)
-    List<MediaAsset> list() {
-        return repository.findAllByOrderByCreatedAtDesc();
+    List<MediaAsset> list(MediaPurpose purpose) {
+        return purpose == null ? repository.findAllByOrderByCreatedAtDesc()
+                : repository.findAllByPurposeOrderByCreatedAtDesc(purpose);
     }
 
     @Transactional(readOnly = true)

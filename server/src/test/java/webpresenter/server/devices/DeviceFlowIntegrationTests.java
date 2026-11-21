@@ -195,7 +195,7 @@ class DeviceFlowIntegrationTests {
     private String upload(byte[] content, String filename) throws Exception {
         String body = mvc.perform(multipart("/api/media")
                         .file(new MockMultipartFile("file", filename, "image/png", content)).with(operator()))
-                .andExpect(status().isCreated())
+                .andExpect(status().is2xxSuccessful())
                 .andReturn().getResponse().getContentAsString();
         return json.readTree(body).get("id").asString();
     }

@@ -7,4 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
 
     List<MediaAsset> findAllByOrderByCreatedAtDesc();
+
+    List<MediaAsset> findAllByPurposeOrderByCreatedAtDesc(MediaPurpose purpose);
+
+    java.util.Optional<MediaAsset> findFirstBySha256AndSizeBytes(String sha256, long sizeBytes);
 }

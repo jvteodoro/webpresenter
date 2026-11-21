@@ -62,7 +62,7 @@ class MediaApiIntegrationTests {
         var file = new MockMultipartFile("file", "Abertura do culto.mp4", "video/mp4", bytes);
 
         String body = mvc.perform(multipart("/api/media").file(file).with(user("tecnico", "AV_TECHNICIAN")))
-                .andExpect(status().isCreated())
+                .andExpect(status().is2xxSuccessful())
                 .andExpect(jsonPath("$.title").value("Abertura do culto"))
                 .andExpect(jsonPath("$.kind").value("VIDEO"))
                 .andExpect(jsonPath("$.sizeBytes").value(bytes.length))
@@ -106,7 +106,7 @@ class MediaApiIntegrationTests {
         var file = new MockMultipartFile("file", "hino.bin", "application/octet-stream", audio);
 
         mvc.perform(multipart("/api/media").file(file).with(user("admin", "ADMIN")))
-                .andExpect(status().isCreated())
+                .andExpect(status().is2xxSuccessful())
                 .andExpect(jsonPath("$.kind").value("AUDIO"));
     }
 

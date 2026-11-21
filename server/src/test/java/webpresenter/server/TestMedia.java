@@ -27,6 +27,12 @@ public final class TestMedia {
         return ffmpeg(dir.resolve("tone.m4a"), "-f", "lavfi", "-i", "sine=frequency=330", "-t", "3", "-c:a", "aac");
     }
 
+    /** A tone of the given frequency: distinct content per frequency (the library de-duplicates). */
+    public static Path tone(Path dir, int frequency) {
+        return ffmpeg(dir.resolve("tone-" + frequency + ".m4a"), "-f", "lavfi", "-i", "sine=frequency=" + frequency,
+                "-t", "2", "-c:a", "aac");
+    }
+
     public static Path image(Path dir) {
         return ffmpeg(dir.resolve("frame.png"), "-f", "lavfi", "-i", "testsrc2=size=640x360", "-frames:v", "1");
     }

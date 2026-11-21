@@ -240,7 +240,7 @@ class LiveIntegrationTests {
         return id(mvc.perform(multipart("/api/media")
                         .file(new MockMultipartFile("file", name, type, Files.readAllBytes(file)))
                         .with(user("tecnico", "AV_TECHNICIAN")))
-                .andExpect(status().isCreated()));
+                .andExpect(status().is2xxSuccessful()));
     }
 
     private static RequestPostProcessor user(String username, String role) {

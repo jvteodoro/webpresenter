@@ -46,6 +46,10 @@ class MediaAsset {
     @Column(name = "storage_key", nullable = false, unique = true)
     private String storageKey;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private MediaPurpose purpose = MediaPurpose.GENERAL;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -56,7 +60,7 @@ class MediaAsset {
 
     MediaAsset(UUID id, String title, String originalFilename, MediaKind kind, String contentType, long sizeBytes,
             String sha256, Long durationMs, Integer width, Integer height, String storageKey, Instant createdAt,
-            String createdBy) {
+            String createdBy, MediaPurpose purpose) {
         this.id = id;
         this.title = title;
         this.originalFilename = originalFilename;
@@ -70,6 +74,7 @@ class MediaAsset {
         this.storageKey = storageKey;
         this.createdAt = createdAt;
         this.createdBy = createdBy;
+        this.purpose = purpose;
     }
 
     void rename(String newTitle) {
@@ -89,4 +94,5 @@ class MediaAsset {
     String storageKey() { return storageKey; }
     Instant createdAt() { return createdAt; }
     String createdBy() { return createdBy; }
+    MediaPurpose purpose() { return purpose; }
 }
