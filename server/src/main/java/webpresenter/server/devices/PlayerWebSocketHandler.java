@@ -59,6 +59,7 @@ class PlayerWebSocketHandler extends TextWebSocketHandler {
         }
         switch (message) {
             case Message.CacheStatus status -> devices.cacheStatus(deviceId, status);
+            case Message.PlaybackState state -> devices.playback(deviceId, state);
             case Message.Error error -> log.warn("player {} reported {}: {}", deviceId, error.code(), error.message());
             default -> sessions.send(session, new Message.Error("UNEXPECTED_MESSAGE",
                     envelope.type() + " is not accepted from players"));

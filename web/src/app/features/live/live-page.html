@@ -1,0 +1,121 @@
+@let s = state();
+@if (!s) {
+  <mat-progress-bar mode="indeterminate" />
+} @else if (!s.eventId) {
+  <section class="empty-state">
+    <mat-icon>live_tv</mat-icon>
+    <h1>Nenhum evento atual</h1>
+    <p>Escolha um evento e use <strong>Preparar nos players</strong> para apresentá-lo aqui.</p>
+    <a mat-flat-button routerLink="/eventos">Ir para Eventos</a>
+  </section>
+} @else {
+  <header class="page-header">
+    <div class="titles">
+      <span class="eyebrow">Ao vivo</span>
+      <h1>{{ s.title }}</h1>
+    </div>
+    <span class="connection" [class.open]="streamStatus() === 'open'"
+          [matTooltip]="streamStatus() === 'open' ? 'Atualizações em tempo real' : 'Reconectando ao servidor…'">
+      <span class="dot"></span>
+      {{ streamStatus() === 'open' ? 'Conectado' : 'Reconectando…' }}
+    </span>
+  </header>
+
+  <section class="stage">
+    <article class="now" [class.rest]="s.status === 'REST'" aria-label="No telão">
+      <span class="label">No telão · <span class="status">{{ statusLabel() }}</span></span>
+      <div class="now-main">
+        <mat-icon class="now-icon">{{ icon(onScreen()) }}</mat-icon>
+        <h2 class="now-title">{{ onScreen()?.title ?? 'Tela de descanso' }}</h2>
+      </div>
+      @if (progress(); as p) {
+        <div class="progress">
+          <mat-progress-bar mode="determinate" [value]="p.percent" />
+          <span class="time">{{ p.position | duration }} / {{ p.duration | duration }}</span>
+        </div>
+      }
+    </article>
+
+    <article class="next" aria-label="A seguir">
+      <span class="label">A seguir</span>
+      @if (next(); as n) {
+        <div class="next-main">
+          <mat-icon>{{ icon(n) }}</mat-icon>
+          <span class="next-title">{{ n.title }}</span>
+        </div>
+      } @else {
+        <span class="next-title muted">Fim do evento</span>
+      }
+    </article>
+  </section>
+
+  @if (canControl()) {
+    <section class="controls" aria-label="Controles">
+      <button mat-stroked-button (click)="send('PREVIOUS')" [disabled]="busy()" matTooltip="Anterior (←, PageUp)">
+        <mat-icon>skip_previous</mat-icon>
+        Anterior
+      </button>
+      <button mat-stroked-button (click)="send('REST')" [disabled]="busy() || s.status === 'REST'" matTooltip="Tela de descanso (Esc, B)">
+        <mat-icon>wallpaper</mat-icon>
+        Descanso
+      </button>
+      <button mat-stroked-button (click)="togglePause()" [disabled]="busy() || !canPause()" matTooltip="Pausar / continuar (P)">
+        <mat-icon>{{ s.status === 'PAUSED' ? 'play_arrow' : 'pause' }}</mat-icon>
+        {{ s.status === 'PAUSED' ? 'Continuar' : 'Pausar' }}
+      </button>
+      <button mat-flat-button class="next-button" (click)="send('NEXT')" [disabled]="busy()" matTooltip="Próximo (→, espaço, PageDown)">
+        Próximo
+        <mat-icon iconPositionEnd>skip_next</mat-icon>
+      </button>
+    </section>
+  }
+
+  <div class="columns">
+    <section class="card">
+      <h2 class="section-title">Ordem do evento</h2>
+      <ol class="items">
+        @for (item of s.items; track item.id; let i = $index) {
+          <li>
+            <button class="item" type="button"
+                    [class.current]="i === s.currentIndex && s.status !== 'REST'"
+                    [class.last]="i === s.currentIndex && s.status === 'REST'"
+                    [class.done]="i < s.currentIndex"
+                    [disabled]="!canControl() || busy()"
+                    [attr.aria-label]="item.title"
+                    [attr.aria-current]="i === s.currentIndex && s.status !== 'REST' ? 'true' : null"
+                    (click)="send('PLAY', item.id)">
+              <span class="position">{{ i + 1 }}</span>
+              <mat-icon class="kind">{{ icon(item) }}</mat-icon>
+              <span class="item-title">{{ item.title }}</span>
+              <span class="item-meta">
+                @if (item.type === 'SLIDE') { Slide } @else { {{ item.durationMs | duration }} }
+              </span>
+              @if (i === s.currentIndex && s.status !== 'REST') {
+                <mat-icon class="on-air" aria-hidden="true">cast</mat-icon>
+              }
+            </button>
+          </li>
+        }
+      </ol>
+    </section>
+
+    <section class="card players">
+      <h2 class="section-title">Players</h2>
+      @for (p of s.players; track p.id) {
+        <div class="player" [attr.aria-label]="p.name">
+          <span class="dot" [class.online]="p.online" [class.failed]="p.playback === 'FAILED'"></span>
+          <span class="player-name">{{ p.name }}</span>
+          <span class="player-state">
+            {{ playbackLabel(p) }}
+            @if (p.online && !p.ready) { · <span class="warn">mídias não prontas</span> }
+          </span>
+          @if (p.detail) {
+            <span class="player-detail">{{ p.detail }}</span>
+          }
+        </div>
+      } @empty {
+        <p class="muted">Nenhum player aprovado.</p>
+      }
+    </section>
+  </div>
+}

@@ -55,11 +55,11 @@ WebSocket with JSON messages in an envelope: `{ "type", "id", "ts", "payload" }`
 | Player → Server | `CACHE_STATUS { eventId, itemsReady, itemsTotal, itemsFailed, bytesReady, bytesTotal }` | Progress of everything the player must cache (rest screen + current event), throttled to 2/s. |
 | Server → Player | `PLAY { itemId, startAt, transition }` | Play a specific item at a scheduled instant. |
 | Server → Player | `PAUSE` / `RESUME` / `SHOW_REST` | Playback control. |
-| Player → Server | `PLAYBACK_STATE { itemId, state, positionMs }` | Playback state reports. |
+| Player → Server | `PLAYBACK_STATE { itemId, status, positionMs, durationMs, detail }` | What the player shows; about once per second while media plays. |
 | Player → Server | `ERROR` | Failures (missing cache, decode error…). |
 
-Implemented so far (M3–M4): `HELLO`, `PAIRING_PENDING`, `PAIRED`, `CONFIG`, `PREPARE`, `REVOKED`,
-`CACHE_STATUS`, `ERROR` (see `protocol/src/main/java/webpresenter/protocol/Message.java`). Peers ignore
+Implemented: `HELLO`, `PAIRING_PENDING`, `PAIRED`, `CONFIG`, `PREPARE`, `PLAY`, `PAUSE`, `RESUME`,
+`SHOW_REST`, `PLAYBACK_STATE`, `REVOKED`, `CACHE_STATUS`, `ERROR` (see `protocol/src/main/java/webpresenter/protocol/Message.java`). Peers ignore
 unknown fields and default missing ones, so slightly different versions keep talking.
 
 Design rules:
@@ -70,7 +70,7 @@ Design rules:
 - An approved device presenting a missing or wrong token is rejected (`INVALID_TOKEN`) and never downgraded; an operator removes it to pair again.
 - A newer connection with the same device id replaces the older one, which is closed with code `4001` and waits 60 s before retrying (prevents two copies of one installation from flapping).
 - Messages to players are sent after the database transaction commits, never before.
-- The devices page polls `GET /api/devices` every 3 s and the event page polls `GET /api/devices/readiness` every 2 s; live push to the web arrives with the `live` module (M5).
+- The live page receives updates through SSE; the devices page (`GET /api/devices`, 3 s) and the event readiness panel (`GET /api/devices/readiness`, 2 s) still poll.
 
 ## Events (M4)
 
@@ -108,7 +108,7 @@ Design rules:
 | M2 ✅ | Library: upload through the web, S3 storage, listing, preview, rename, delete; web login through Keycloak. |
 | M3 ✅ | Protocol, player connection, device approval, rest screen with verified cache. |
 | M4 ✅ | Event with items (media and text slides), current event, pre-cache on the player with readiness. |
-| M5 | Live control, playback, rest screen, fade. **MVP complete.** |
+| M5 ✅ | Live control, playback, rest screen, fade. **MVP complete.** |
 
 ## M0: player spike
 
@@ -129,3 +129,12 @@ Evaluation criteria:
 core for the whole process with software decoding (Intel i7-8650U), correct overlay
 composition and fades, 4 ms shutdown. The VLCJ comparison was dropped. Windows validation
 remains open (see `architecture.md`). Details and pitfalls: `spikes/player-engine/README.md`.
+
+## Live presentation (M5)
+
+- The `live` module keeps the live state of the current event in memory (item on screen, REST / PLAYING / PAUSED / SHOWING). After a server restart the outputs return to the rest screen.
+- Commands (`POST /api/live/commands`: PLAY item, NEXT, PREVIOUS, PAUSE, RESUME, REST) go to every approved player with `startAt` 300 ms ahead, so players start together. Leaders, AV technicians and admins control; everyone signed in can follow.
+- Web clients receive every change through `GET /api/live/stream` (SSE). The live page shows what is on the outputs, what comes next, progress, the order (click to jump) and each player; keys: → / space / PageDown next, ← / PageUp previous, Esc / B rest screen, P pause (presentation clickers work).
+- The player uses two mpv engines: one loops the rest video (muted), the other plays items. Videos cross-fade over the rest screen, audio plays over it, images and text slides fade in. An item not yet cached is downloaded and started late.
+- When a video or audio ends, the player returns to the rest screen and reports `ENDED`; the live state follows, and NEXT continues after that item.
+- If the server goes away, the player finishes the current item and shows the rest screen. A player connecting during a video joins at the current position.

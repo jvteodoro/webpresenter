@@ -1,0 +1,57 @@
+server:
+  port: ${WEBPRESENTER_PORT:8090}
+
+spring:
+  application:
+    name: webpresenter-server
+  datasource:
+    url: ${WEBPRESENTER_DB_URL:jdbc:postgresql://localhost:5432/webpresenter}
+    username: ${WEBPRESENTER_DB_USER:webpresenter}
+    password: ${WEBPRESENTER_DB_PASSWORD:webpresenter}
+  servlet:
+    multipart:
+      # Media files can be large; uploads are streamed to a temporary file, not held in memory.
+      max-file-size: 8GB
+      max-request-size: 8GB
+      file-size-threshold: 1MB
+  mvc:
+    problemdetails:
+      enabled: true
+    async:
+      # Live streams (SSE) manage their own lifetime.
+      request-timeout: -1
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${WEBPRESENTER_OIDC_ISSUER:http://localhost:8180/realms/webpresenter}
+
+webpresenter:
+  storage:
+    endpoint: ${WEBPRESENTER_S3_ENDPOINT:http://localhost:8333}
+    public-endpoint: ${WEBPRESENTER_S3_PUBLIC_ENDPOINT:http://localhost:8333}
+    region: us-east-1
+    access-key: ${WEBPRESENTER_S3_ACCESS_KEY:webpresenter}
+    secret-key: ${WEBPRESENTER_S3_SECRET_KEY:webpresenter-dev-secret}
+    bucket: ${WEBPRESENTER_S3_BUCKET:media}
+  library:
+    ffprobe-path: ${WEBPRESENTER_FFPROBE:ffprobe}
+    download-url-validity: 6h
+  cors:
+    allowed-origins: ${WEBPRESENTER_CORS_ORIGINS:http://localhost:4200}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true

@@ -43,6 +43,12 @@ cd web && npm install && npm start
 ./gradlew :player:run --args="--windowed --server-url=http://localhost:8090"
 ```
 
+### Presenting an event
+
+1. **Biblioteca**: upload videos, audio and images.
+2. **Eventos**: create the event, add media and text slides, order them, then **Preparar nos players**.
+3. **Ao vivo**: control the outputs (→ / PageDown next, ← / PageUp previous, Esc rest screen, P pause).
+
 ### Running a MediaPlayer
 
 ```sh

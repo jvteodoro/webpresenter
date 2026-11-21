@@ -38,6 +38,8 @@ export class CurrentUser {
   readonly canManageLibrary = computed(() => this.hasAnyRole('ADMIN', 'AV_TECHNICIAN'));
   /** May create and change events and prepare players for them. */
   readonly canEditEvents = computed(() => this.hasAnyRole('ADMIN', 'AV_TECHNICIAN', 'WORSHIP_LEADER'));
+  /** May control the live presentation. */
+  readonly canControlLive = computed(() => this.hasAnyRole('ADMIN', 'AV_TECHNICIAN', 'WORSHIP_LEADER'));
   /** May approve, configure and remove MediaPlayers. */
   readonly canManageDevices = computed(() => this.hasAnyRole('ADMIN', 'AV_TECHNICIAN'));
 

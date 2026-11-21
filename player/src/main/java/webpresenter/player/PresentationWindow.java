@@ -1,8 +1,15 @@
 package webpresenter.player;
 
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import javafx.animation.FadeTransition;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.Timeline;
+import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.SimpleDoubleProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
@@ -12,9 +19,14 @@ import javafx.scene.Scene;
 import javafx.scene.control.Label;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.Background;
+import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.paint.CycleMethod;
+import javafx.scene.paint.LinearGradient;
+import javafx.scene.paint.Stop;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.TextAlignment;
@@ -27,29 +39,44 @@ import webpresenter.player.engine.mpv.MpvEngine;
 import webpresenter.protocol.Message;
 
 /**
- * The output window on the chosen display. Layers, bottom to top: video, rest image, and an
- * information panel (connection state, pairing code) that is only shown when nothing is being presented.
- * All methods must be called on the JavaFX thread.
+ * The output window on the chosen display. Layers, bottom to top: rest video, rest image, item
+ * video, item image, slide, and an information panel (connection state, pairing code) shown only
+ * when nothing is presented.
+ *
+ * <p>Two playback engines: one loops the rest screen video (muted), the other plays event items.
+ * Audio items therefore play over the rest screen. All methods must be called on the JavaFX thread.
  */
 final class PresentationWindow {
 
     private static final System.Logger LOG = System.getLogger(PresentationWindow.class.getName());
+    private static final double FULL_VOLUME = 100;
 
     private final Stage stage;
     private final boolean windowed;
     private final StackPane root = new StackPane();
-    private final ImageView restImage = new ImageView();
+    private final ImageView restImage = fitted(new ImageView());
+    private final ImageView itemImage = fitted(new ImageView());
+    private final StackPane slide = new StackPane();
+    private final Label slideTitle = label(FontWeight.BOLD, Color.WHITE);
+    private final Label slideBody = label(FontWeight.NORMAL, Color.gray(0.92));
     private final VBox info = new VBox(18);
-    private final Label infoTitle = label(44, FontWeight.LIGHT, Color.gray(0.85));
-    private final Label infoCode = label(120, FontWeight.BOLD, Color.WHITE);
-    private final Label infoDetail = label(24, FontWeight.NORMAL, Color.gray(0.6));
+    private final Label infoTitle = label(FontWeight.LIGHT, Color.gray(0.85));
+    private final Label infoCode = label(FontWeight.BOLD, Color.WHITE);
+    private final Label infoDetail = label(FontWeight.NORMAL, Color.gray(0.6));
+    private final Map<Node, FadeTransition> fades = new HashMap<>();
+    private final DoubleProperty itemVolume = new SimpleDoubleProperty(0);
 
-    private VideoEngine engine;
-    private Node videoView;
+    private VideoEngine restEngine;
+    private VideoEngine itemEngine;
+    private Node restVideo;
+    private Node itemVideo;
     private Screen screen;
-    private Rest rest = Rest.NONE;
     private Duration fade = Duration.millis(Message.Transition.DEFAULT.durationMs());
-    private final java.util.Map<Node, FadeTransition> fades = new java.util.HashMap<>();
+    private Timeline volumeRamp;
+
+    private Rest rest = Rest.NONE;
+    private Item item = Item.NONE;
+    private Runnable onItemEnded = () -> {};
 
     private enum RestKind { NONE, IMAGE, VIDEO }
 
@@ -57,21 +84,46 @@ final class PresentationWindow {
         static final Rest NONE = new Rest(RestKind.NONE, null);
     }
 
+    /** What is presented on top of the rest screen. */
+    enum ItemKind { NONE, VIDEO, AUDIO, IMAGE, SLIDE }
+
+    private record Item(ItemKind kind, Path file, long startMs) {
+        static final Item NONE = new Item(ItemKind.NONE, null, 0);
+    }
+
     PresentationWindow(Stage stage, boolean windowed) {
         this.stage = stage;
         this.windowed = windowed;
 
         root.setStyle("-fx-background-color: black;");
-        restImage.setPreserveRatio(true);
-        restImage.fitWidthProperty().bind(root.widthProperty());
-        restImage.fitHeightProperty().bind(root.heightProperty());
+        bindFit(restImage);
+        bindFit(itemImage);
         restImage.setOpacity(0);
+        itemImage.setOpacity(0);
+
+        VBox slideText = new VBox(28, slideTitle, slideBody);
+        slideText.setAlignment(Pos.CENTER);
+        slide.getChildren().add(slideText);
+        slide.setBackground(new Background(new BackgroundFill(new LinearGradient(0, 0, 1, 1, true,
+                CycleMethod.NO_CYCLE, new Stop(0, Color.web("#1d2b53")), new Stop(1, Color.web("#0b1020"))), null, null)));
+        slide.setOpacity(0);
+        slide.setVisible(false);
 
         infoCode.setStyle("-fx-font-family: 'Monospaced';");
         info.setAlignment(Pos.CENTER);
         info.setPadding(new Insets(48));
         info.getChildren().addAll(infoTitle, infoCode, infoDetail);
-        root.getChildren().addAll(restImage, info);
+
+        root.getChildren().addAll(restImage, itemImage, slide, info);
+        // Text scales with the output height, so slides read the same on any display.
+        root.heightProperty().addListener((obs, o, h) -> scaleText(h.doubleValue()));
+        root.widthProperty().addListener((obs, o, w) -> slide.setPadding(new Insets(0, w.doubleValue() * 0.08, 0, w.doubleValue() * 0.08)));
+
+        itemVolume.addListener((obs, o, v) -> {
+            if (itemEngine != null) {
+                itemEngine.setVolume(v.doubleValue());
+            }
+        });
 
         Scene scene = new Scene(root, 1280, 720, Color.BLACK);
         scene.setCursor(windowed ? Cursor.DEFAULT : Cursor.NONE);
@@ -83,6 +135,7 @@ final class PresentationWindow {
         }
         moveTo(0);
         stage.show();
+        scaleText(root.getHeight() > 0 ? root.getHeight() : 720);
     }
 
     Scene scene() {
@@ -93,11 +146,18 @@ final class PresentationWindow {
         fade = Duration.millis(transition.type() == Message.TransitionType.CUT ? 1 : Math.max(1, transition.durationMs()));
     }
 
-    /** Moves the window to a display, recreating the engine if the output resolution changes. */
+    /** Called (on the JavaFX thread) when an item video or audio reaches its end. */
+    void setOnItemEnded(Runnable listener) {
+        this.onItemEnded = listener;
+    }
+
+    // ------------------------------------------------------------------ display and engines
+
+    /** Moves the window to a display, recreating the engines if the output resolution changes. */
     void moveTo(int displayIndex) {
         List<Screen> screens = Screen.getScreens();
         Screen target = screens.get(displayIndex >= 0 && displayIndex < screens.size() ? displayIndex : 0);
-        if (target.equals(screen) && engine != null) {
+        if (target.equals(screen) && restEngine != null) {
             return;
         }
         screen = target;
@@ -112,85 +172,214 @@ final class PresentationWindow {
         if (!windowed) {
             stage.setFullScreen(true);
         }
-        replaceEngine((int) Math.round(width * target.getOutputScaleX()),
+        replaceEngines((int) Math.round(width * target.getOutputScaleX()),
                 (int) Math.round(height * target.getOutputScaleY()));
         LOG.log(System.Logger.Level.INFO, "presenting on display {0} {1}", screens.indexOf(target), bounds);
     }
 
-    private void replaceEngine(int width, int height) {
-        if (engine != null) {
-            root.getChildren().remove(videoView);
-            engine.close();
+    private void replaceEngines(int width, int height) {
+        if (restEngine != null) {
+            root.getChildren().removeAll(restVideo, itemVideo);
+            restEngine.close();
+            itemEngine.close();
         }
-        engine = new MpvEngine(width, height);
-        engine.setVolume(0); // rest screens are visual only
-        videoView = engine.view();
-        if (videoView instanceof ImageView iv) {
-            iv.fitWidthProperty().bind(root.widthProperty());
-            iv.fitHeightProperty().bind(root.heightProperty());
-        }
-        videoView.setOpacity(rest.kind() == RestKind.VIDEO ? 1 : 0);
-        root.getChildren().addFirst(videoView);
+        restEngine = new MpvEngine(width, height);
+        restEngine.setVolume(0); // rest screens are visual only
+        itemEngine = new MpvEngine(width, height);
+        itemEngine.setVolume(itemVolume.get());
+        itemEngine.onEndOfMedia(() -> javafx.application.Platform.runLater(this::itemMediaEnded));
+        restVideo = bindFit(restEngine.view());
+        itemVideo = bindFit(itemEngine.view());
+        restVideo.setOpacity(rest.kind() == RestKind.VIDEO ? 1 : 0);
+        itemVideo.setOpacity(item.kind() == ItemKind.VIDEO ? 1 : 0);
+        root.getChildren().add(0, restVideo);
+        root.getChildren().add(root.getChildren().indexOf(itemImage), itemVideo);
         if (rest.kind() == RestKind.VIDEO) {
-            engine.play(rest.file(), true);
+            restEngine.play(rest.file(), true);
+        }
+        if (item.kind() == ItemKind.VIDEO || item.kind() == ItemKind.AUDIO) {
+            itemEngine.play(item.file(), false, item.startMs());
         }
     }
 
-    // ------------------------------------------------------------------ what is shown
+    // ------------------------------------------------------------------ rest screen
 
     boolean isPresenting() {
-        return rest.kind() != RestKind.NONE;
+        return rest.kind() != RestKind.NONE || item.kind() != ItemKind.NONE;
     }
 
-    void showRestImage(Path file) {
+    void setRestImage(Path file) {
         Rest previous = rest;
         rest = new Rest(RestKind.IMAGE, file);
         restImage.setImage(new Image(file.toUri().toString()));
         hideInfo();
         fadeTo(restImage, 1);
         if (previous.kind() == RestKind.VIDEO) {
-            stopVideoAfterFade();
+            fadeTo(restVideo, 0).setOnFinished(e -> stopRestVideoIfUnused());
         }
     }
 
-    void showRestVideo(Path file) {
+    void setRestVideo(Path file) {
         Rest previous = rest;
         rest = new Rest(RestKind.VIDEO, file);
         hideInfo();
-        engine.play(file, true);
-        fadeTo(videoView, 1);
+        restEngine.play(file, true);
+        if (item.kind() == ItemKind.VIDEO) {
+            restEngine.setPaused(true); // hidden behind an item video
+        }
+        fadeTo(restVideo, 1);
         if (previous.kind() == RestKind.IMAGE) {
             fadeTo(restImage, 0);
         }
     }
 
-    /** No rest screen configured: black output. */
-    void showBlack() {
+    /** No rest screen configured: black output behind items. */
+    void clearRest() {
         Rest previous = rest;
         rest = Rest.NONE;
-        hideInfo();
         fadeTo(restImage, 0);
         if (previous.kind() == RestKind.VIDEO) {
-            stopVideoAfterFade();
+            fadeTo(restVideo, 0).setOnFinished(e -> stopRestVideoIfUnused());
         }
     }
 
-    private void stopVideoAfterFade() {
-        Node view = videoView;
-        FadeTransition t = fadeTo(view, 0);
+    private void stopRestVideoIfUnused() {
+        if (rest.kind() != RestKind.VIDEO) {
+            restEngine.stop();
+        }
+    }
+
+    // ------------------------------------------------------------------ event items
+
+    ItemKind itemKind() {
+        return item.kind();
+    }
+
+    void showVideo(Path file, long startMs) {
+        enterItem(new Item(ItemKind.VIDEO, file, startMs));
+        itemEngine.play(file, false, startMs);
+        rampVolume(FULL_VOLUME);
+        fadeTo(itemVideo, 1).setOnFinished(e -> {
+            if (item.kind() == ItemKind.VIDEO && rest.kind() == RestKind.VIDEO) {
+                restEngine.setPaused(true); // invisible: save CPU
+            }
+        });
+        fadeTo(itemImage, 0);
+        hideSlide();
+    }
+
+    /** Audio plays over the rest screen. */
+    void showAudio(Path file, long startMs) {
+        enterItem(new Item(ItemKind.AUDIO, file, startMs));
+        itemEngine.play(file, false, startMs);
+        rampVolume(FULL_VOLUME);
+        fadeTo(itemVideo, 0);
+        fadeTo(itemImage, 0);
+        hideSlide();
+        resumeRestVideo();
+    }
+
+    void showImage(Path file) {
+        enterItem(new Item(ItemKind.IMAGE, file, 0));
+        itemImage.setImage(new Image(file.toUri().toString()));
+        fadeTo(itemImage, 1);
+        hideSlide();
+        stopItemMedia();
+    }
+
+    void showSlide(String title, String body) {
+        enterItem(new Item(ItemKind.SLIDE, null, 0));
+        slideTitle.setText(title == null ? "" : title);
+        slideBody.setText(body == null ? "" : body);
+        slideBody.setManaged(body != null && !body.isBlank());
+        slide.setVisible(true);
+        fadeTo(slide, 1);
+        fadeTo(itemImage, 0);
+        stopItemMedia();
+    }
+
+    /** Leaves the current item and shows the rest screen. */
+    void showRest() {
+        item = Item.NONE;
+        resumeRestVideo();
+        fadeTo(itemImage, 0);
+        hideSlide();
+        stopItemMedia();
+        if (!isPresenting()) {
+            hideInfo();
+        }
+    }
+
+    void setItemPaused(boolean paused) {
+        if (item.kind() == ItemKind.VIDEO || item.kind() == ItemKind.AUDIO) {
+            itemEngine.setPaused(paused);
+        }
+    }
+
+    long itemPositionMs() {
+        return itemEngine.positionMs();
+    }
+
+    long itemDurationMs() {
+        return itemEngine.durationMs();
+    }
+
+    private void enterItem(Item next) {
+        item = next;
+        hideInfo();
+    }
+
+    private void itemMediaEnded() {
+        if (item.kind() == ItemKind.VIDEO || item.kind() == ItemKind.AUDIO) {
+            showRest();
+            onItemEnded.run();
+        }
+    }
+
+    /** Fades out the item video and its sound, then stops the item engine. */
+    private void stopItemMedia() {
+        rampVolume(0);
+        FadeTransition t = fadeTo(itemVideo, 0);
         t.setOnFinished(e -> {
-            fades.remove(view, t);
-            if (rest.kind() != RestKind.VIDEO) {
-                engine.stop();
+            fades.remove(itemVideo, t);
+            if (item.kind() != ItemKind.VIDEO && item.kind() != ItemKind.AUDIO) {
+                itemEngine.stop();
             }
         });
     }
 
-    /** Information panel over a black background (also stops any rest screen). */
-    void showInfo(String title, String code, String detail) {
-        if (isPresenting()) {
-            showBlack();
+    private void resumeRestVideo() {
+        if (rest.kind() == RestKind.VIDEO) {
+            restEngine.setPaused(false);
         }
+    }
+
+    private void hideSlide() {
+        FadeTransition t = fadeTo(slide, 0);
+        t.setOnFinished(e -> {
+            fades.remove(slide, t);
+            if (item.kind() != ItemKind.SLIDE) {
+                slide.setVisible(false);
+            }
+        });
+    }
+
+    private void rampVolume(double target) {
+        if (volumeRamp != null) {
+            volumeRamp.stop();
+        }
+        volumeRamp = new Timeline(new KeyFrame(fade, new KeyValue(itemVolume, target)));
+        volumeRamp.play();
+    }
+
+    // ------------------------------------------------------------------ information panel
+
+    /** Information panel over black (connection state, pairing); stops anything presented. */
+    void showInfo(String title, String code, String detail) {
+        if (item.kind() != ItemKind.NONE) {
+            showRest();
+        }
+        clearRest();
         infoTitle.setText(title);
         infoCode.setText(code == null ? "" : code);
         infoCode.setManaged(code != null);
@@ -208,9 +397,11 @@ final class PresentationWindow {
         });
     }
 
+    // ------------------------------------------------------------------ helpers
+
     /**
-     * Fades a node, replacing any fade still running on it. Without this, the end of an earlier
-     * fade-out (and its onFinished) could hide a node that was shown again in the meantime.
+     * Fades a node, replacing any fade still running on it, so the end of an earlier fade (and
+     * its onFinished) never hides a node that was shown again in the meantime.
      */
     private FadeTransition fadeTo(Node node, double opacity) {
         FadeTransition running = fades.remove(node);
@@ -225,15 +416,37 @@ final class PresentationWindow {
         return t;
     }
 
+    private void scaleText(double height) {
+        slideTitle.setFont(Font.font("System", FontWeight.BOLD, Math.max(24, height * 0.085)));
+        slideBody.setFont(Font.font("System", FontWeight.NORMAL, Math.max(18, height * 0.055)));
+        infoTitle.setFont(Font.font("System", FontWeight.LIGHT, Math.max(20, height * 0.06)));
+        infoCode.setFont(Font.font("Monospaced", FontWeight.BOLD, Math.max(40, height * 0.16)));
+        infoDetail.setFont(Font.font("System", FontWeight.NORMAL, Math.max(14, height * 0.032)));
+    }
+
+    private Node bindFit(Node node) {
+        if (node instanceof ImageView iv) {
+            iv.fitWidthProperty().bind(root.widthProperty());
+            iv.fitHeightProperty().bind(root.heightProperty());
+        }
+        return node;
+    }
+
+    private static ImageView fitted(ImageView view) {
+        view.setPreserveRatio(true);
+        return view;
+    }
+
     void close() {
-        if (engine != null) {
-            engine.close();
+        if (restEngine != null) {
+            restEngine.close();
+            itemEngine.close();
         }
     }
 
-    private static Label label(double size, FontWeight weight, Color color) {
+    private static Label label(FontWeight weight, Color color) {
         Label label = new Label();
-        label.setFont(Font.font("System", weight, size));
+        label.setFont(Font.font("System", weight, 32));
         label.setTextFill(color);
         label.setTextAlignment(TextAlignment.CENTER);
         label.setWrapText(true);

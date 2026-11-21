@@ -3,6 +3,11 @@ import { Routes } from '@angular/router';
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'eventos' },
   {
+    path: 'ao-vivo',
+    title: 'Ao vivo · webpresenter',
+    loadComponent: () => import('./features/live/live-page').then((m) => m.LivePage),
+  },
+  {
     path: 'eventos',
     title: 'Eventos · webpresenter',
     loadComponent: () => import('./features/events/events-page').then((m) => m.EventsPage),

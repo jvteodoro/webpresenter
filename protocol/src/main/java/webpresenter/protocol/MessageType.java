@@ -9,10 +9,15 @@ import java.util.stream.Collectors;
 public enum MessageType {
     HELLO(Message.Hello.class),
     CACHE_STATUS(Message.CacheStatus.class),
+    PLAYBACK_STATE(Message.PlaybackState.class),
     PAIRING_PENDING(Message.PairingPending.class),
     PAIRED(Message.Paired.class),
     CONFIG(Message.Config.class),
     PREPARE(Message.Prepare.class),
+    PLAY(Message.Play.class),
+    PAUSE(Message.Pause.class),
+    RESUME(Message.Resume.class),
+    SHOW_REST(Message.ShowRest.class),
     REVOKED(Message.Revoked.class),
     ERROR(Message.Error.class);
 

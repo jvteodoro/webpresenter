@@ -45,6 +45,9 @@ final class Mpv {
     static final MethodHandle setPropertyString =
             fn("mpv_set_property_string", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, ADDRESS));
     static final MethodHandle command = fn("mpv_command", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
+    static final MethodHandle getPropertyString =
+            fn("mpv_get_property_string", FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS));
+    static final MethodHandle free = fn("mpv_free", FunctionDescriptor.ofVoid(ADDRESS));
     static final MethodHandle waitEvent =
             fn("mpv_wait_event", FunctionDescriptor.of(ADDRESS, ADDRESS, JAVA_DOUBLE));
     static final MethodHandle wakeup = fn("mpv_wakeup", FunctionDescriptor.ofVoid(ADDRESS));

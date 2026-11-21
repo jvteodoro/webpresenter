@@ -27,7 +27,7 @@ import webpresenter.server.planning.PlannedEvents;
 
 /** Device registry: pairing, approval, configuration, and the messages that keep players in sync. */
 @Service
-class DeviceService {
+class DeviceService implements Players {
 
     private static final Logger log = LoggerFactory.getLogger(DeviceService.class);
     private static final TypeReference<List<Message.DisplayInfo>> DISPLAY_LIST = new TypeReference<>() {};
@@ -37,15 +37,17 @@ class DeviceService {
     private final MediaCatalog catalog;
     private final PlannedEvents plannedEvents;
     private final JsonMapper json;
+    private final org.springframework.context.ApplicationEventPublisher events;
     private final Clock clock = Clock.systemUTC();
 
     DeviceService(DeviceRepository repository, PlayerSessions sessions, MediaCatalog catalog,
-            PlannedEvents plannedEvents, JsonMapper json) {
+            PlannedEvents plannedEvents, JsonMapper json, org.springframework.context.ApplicationEventPublisher events) {
         this.repository = repository;
         this.sessions = sessions;
         this.catalog = catalog;
         this.plannedEvents = plannedEvents;
         this.json = json;
+        this.events = events;
     }
 
     // ------------------------------------------------------------------ player connection
@@ -89,7 +91,9 @@ class DeviceService {
         } else {
             sessions.send(session, config(device));
             sessions.send(session, prepare());
+            events.publishEvent(new PlayerEvents.PlayerReady(id));
         }
+        events.publishEvent(new PlayerEvents.PlayerStatusChanged(id));
         return Optional.of(id);
     }
 
@@ -97,10 +101,40 @@ class DeviceService {
     void disconnected(UUID id, WebSocketSession session) {
         sessions.unregister(id, session);
         repository.findById(id).ifPresent(d -> d.seen(clock.instant()));
+        events.publishEvent(new PlayerEvents.PlayerStatusChanged(id));
     }
 
     void cacheStatus(UUID id, Message.CacheStatus status) {
         sessions.updateCacheStatus(id, status);
+        events.publishEvent(new PlayerEvents.PlayerStatusChanged(id));
+    }
+
+    void playback(UUID id, Message.PlaybackState state) {
+        events.publishEvent(new PlayerEvents.PlaybackReported(id, state));
+    }
+
+    // ------------------------------------------------------------------ Players (for other modules)
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PlayerSummary> approved() {
+        return repository.findAllByStatus(DeviceStatus.APPROVED).stream()
+                .map(d -> new PlayerSummary(d.id(), d.name(), sessions.isOnline(d.id()),
+                        sessions.cacheStatus(d.id()).orElse(null)))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public void broadcast(Message message) {
+        for (Device device : repository.findAllByStatus(DeviceStatus.APPROVED)) {
+            sessions.send(device.id(), message);
+        }
+    }
+
+    @Override
+    public void send(UUID deviceId, Message message) {
+        sessions.send(deviceId, message);
     }
 
     // ------------------------------------------------------------------ operator actions
@@ -129,6 +163,8 @@ class DeviceService {
         sessions.send(id, new Message.Paired(token));
         sessions.send(id, config(device));
         sessions.send(id, prepare());
+        events.publishEvent(new PlayerEvents.PlayerReady(id));
+        events.publishEvent(new PlayerEvents.PlayerStatusChanged(id));
         log.info("player {} approved as '{}' by {}", id, device.name(), approvedBy);
         return view(device);
     }
@@ -152,6 +188,7 @@ class DeviceService {
         }
         device.configure(nameOr(name, device.name()), displayIndex, restMediaId);
         sessions.send(id, config(device));
+        events.publishEvent(new PlayerEvents.PlayerStatusChanged(id));
         return view(device);
     }
 
@@ -161,6 +198,7 @@ class DeviceService {
         sessions.send(id, new Message.Revoked("device removed by an operator"));
         sessions.disconnect(id, CloseStatus.NORMAL.withReason("device removed"));
         repository.delete(device);
+        events.publishEvent(new PlayerEvents.PlayerStatusChanged(id));
         log.info("player {} ('{}') removed", id, device.name());
     }
 

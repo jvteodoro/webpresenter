@@ -40,6 +40,17 @@ public sealed interface Message {
         }
     }
 
+    /**
+     * What the player is showing, sent when it changes and about once per second while media plays.
+     *
+     * @param itemId item of the prepared event, or null for the rest screen
+     * @param positionMs playback position (0 for images and slides)
+     * @param durationMs media duration if known, otherwise 0
+     * @param detail human-readable reason when {@code status} is FAILED
+     */
+    record PlaybackState(String itemId, PlaybackStatus status, long positionMs, long durationMs, String detail)
+            implements Message {}
+
     // ------------------------------------------------------------------ server → player
 
     /** The device is waiting for operator approval; the player shows the code on screen. */
@@ -74,6 +85,24 @@ public sealed interface Message {
         }
     }
 
+    /**
+     * Present an item of the prepared event.
+     *
+     * @param startAt instant at which to start, so several players start together
+     * @param startPositionMs where to start in a video or audio (non-zero when joining mid-item)
+     */
+    record Play(String eventId, String itemId, java.time.Instant startAt, long startPositionMs, Transition transition)
+            implements Message {}
+
+    /** Pause the current video or audio. */
+    record Pause() implements Message {}
+
+    /** Resume after {@link Pause}. */
+    record Resume() implements Message {}
+
+    /** Stop whatever is presented and show the rest screen. */
+    record ShowRest(Transition transition) implements Message {}
+
     /** The device was removed by an operator; the player forgets its token. */
     record Revoked(String reason) implements Message {}
 
@@ -95,6 +124,21 @@ public sealed interface Message {
     record Slide(String title, String body) {}
 
     enum ItemType { MEDIA, SLIDE }
+
+    enum PlaybackStatus {
+        /** Downloading or opening the item. */
+        LOADING,
+        /** Video or audio playing. */
+        PLAYING,
+        PAUSED,
+        /** Image or slide on screen. */
+        SHOWING,
+        /** Video or audio reached its end; the player went back to the rest screen. */
+        ENDED,
+        /** Rest screen on screen. */
+        REST,
+        FAILED
+    }
 
     record Transition(TransitionType type, int durationMs) {
 

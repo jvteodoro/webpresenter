@@ -17,6 +17,9 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+    async:
+      # Live streams (SSE) manage their own lifetime.
+      request-timeout: -1
   jpa:
     open-in-view: false
     hibernate:

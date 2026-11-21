@@ -14,7 +14,7 @@ This document records the architectural decisions for the system. See `business.
 | Identity | Keycloak (registration, fixed global roles, token generation). |
 | Database | PostgreSQL (shared by the application and Keycloak, separate databases). |
 | Media storage | SeaweedFS (S3 API) from day one. MinIO was the first choice, but it stopped publishing community binaries and images in 2025. |
-| Real-time communication | WebSocket for frontend clients and MediaPlayers. |
+| Real-time communication | WebSocket between server and MediaPlayers; Server-Sent Events (read with `fetch`) from server to web clients, commands over REST. |
 | Job queue | RabbitMQ between the central server and the media workers. |
 | Media processing | Python workers (yt-dlp, ffmpeg, Whisper/WhisperX, Demucs). |
 | MediaPlayer | Java + JavaFX + libmpv (software render API, bindings through the Java FFM API). Decided by the M0 spike. |
@@ -88,7 +88,8 @@ Event roles (prayer, tithing collection, announcements…) are informational ass
 
 ## Real-time communication
 
-- WebSocket is the single real-time protocol for the web frontend, the Android app, and MediaPlayers.
+- MediaPlayers use a WebSocket (`/ws/player`): two-way, authenticated in the protocol with the device token.
+- Web clients follow the live state through Server-Sent Events (`/api/live/stream`) and send commands over REST. The stream is read with `fetch` so the Keycloak token travels in the `Authorization` header like every other API call; browsers cannot set that header on a WebSocket or `EventSource`. Changed from the initial "WebSocket for everything" decision during M5 for that reason.
 - **The server is the single source of truth for live state.** Clients and players only send commands and receive state updates.
 - Commands sent to MediaPlayers carry a scheduled start time (`startAt`) based on NTP-synchronized clocks. Players start playback at that instant, which gives about 100 ms alignment across hosts.
 - Screens and audio outputs driven by the same MediaPlayer host are frame-accurate, because a single process controls them. Tight cross-host lip-sync (audio on one machine, video on another) is out of scope.

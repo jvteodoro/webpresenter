@@ -20,7 +20,20 @@ public interface VideoEngine extends AutoCloseable {
     }
 
     /** Loads and starts playing a media file, optionally looping it until stopped. */
-    void play(Path media, boolean loop);
+    default void play(Path media, boolean loop) {
+        play(media, loop, 0);
+    }
+
+    /** Loads and plays a media file starting at {@code startMs} (used to join an item in progress). */
+    void play(Path media, boolean loop, long startMs);
+
+    void setPaused(boolean paused);
+
+    /** Current playback position, or 0 if unknown. */
+    long positionMs();
+
+    /** Duration of the loaded media, or 0 if unknown. */
+    long durationMs();
 
     void stop();
 

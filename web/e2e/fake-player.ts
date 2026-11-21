@@ -123,3 +123,41 @@ export async function deleteTestData(marker: string): Promise<void> {
     await fetch(`http://localhost:8090/api/media/${m.id}`, { method: 'DELETE', headers });
   }
 }
+
+/** Uploads a fixture file to the library as the AV technician; returns the media id. */
+export async function uploadMedia(file: string, title: string, mimeType: string): Promise<string> {
+  const { readFileSync } = await import('node:fs');
+  const form = new FormData();
+  form.append(
+    'file',
+    new Blob([readFileSync(file)], { type: mimeType }),
+    `${title}.${file.split('.').pop()}`,
+  );
+  const response = await fetch('http://localhost:8090/api/media', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${await apiToken('tecnico')}` },
+    body: form,
+  });
+  return (await response.json()).id as string;
+}
+
+/** Calls the API as a development user and returns the JSON answer. */
+export async function api(
+  method: string,
+  path: string,
+  body?: unknown,
+  user = 'lider',
+): Promise<any> {
+  const response = await fetch(`http://localhost:8090${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${await apiToken(user)}`,
+      'Content-Type': 'application/json',
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`${method} ${path} answered ${response.status}`);
+  }
+  return response.status === 204 ? null : response.json();
+}

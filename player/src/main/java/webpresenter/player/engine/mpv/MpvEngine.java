@@ -135,9 +135,59 @@ public final class MpvEngine implements VideoEngine {
     }
 
     @Override
-    public void play(Path media, boolean loop) {
+    public void play(Path media, boolean loop, long startMs) {
         setProperty("loop-file", loop ? "inf" : "no");
+        setProperty("pause", "no");
+        // "start" applies to the next file loaded; "none" resets it.
+        setProperty("start", startMs > 0 ? String.format(java.util.Locale.ROOT, "+%.3f", startMs / 1000.0) : "none");
         command("loadfile", media.toAbsolutePath().toString(), "replace");
+    }
+
+    @Override
+    public void setPaused(boolean paused) {
+        setProperty("pause", paused ? "yes" : "no");
+    }
+
+    @Override
+    public long positionMs() {
+        return secondsPropertyMs("time-pos");
+    }
+
+    @Override
+    public long durationMs() {
+        return secondsPropertyMs("duration");
+    }
+
+    private long secondsPropertyMs(String name) {
+        String value = getProperty(name);
+        if (value == null) {
+            return 0;
+        }
+        try {
+            return Math.round(Double.parseDouble(value) * 1000);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /** Property as a string, or null when unavailable (for example no file loaded). */
+    private String getProperty(String name) {
+        if (!running) {
+            return null;
+        }
+        try (Arena a = Arena.ofConfined()) {
+            MemorySegment result = (MemorySegment) Mpv.getPropertyString.invokeExact(handle, a.allocateFrom(name));
+            if (result.equals(MemorySegment.NULL)) {
+                return null;
+            }
+            try {
+                return result.reinterpret(256).getString(0);
+            } finally {
+                Mpv.free.invokeExact(result);
+            }
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     @Override
