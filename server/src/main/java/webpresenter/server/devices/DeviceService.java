@@ -263,7 +263,7 @@ class DeviceService implements Players {
 
     private Message.MediaRef mediaRef(MediaFile media) {
         return new Message.MediaRef(media.id().toString(), Message.MediaKind.valueOf(media.kind().name()),
-                catalog.downloadUrl(media.id()).url().toString(), media.sha256(), media.sizeBytes());
+                catalog.playerDownloadUrl(media.id()).url().toString(), media.sha256(), media.sizeBytes());
     }
 
     private DeviceView view(Device device) {

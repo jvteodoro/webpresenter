@@ -1,5 +1,19 @@
-# One public address for everything: web app, API, player WebSocket, live stream and Keycloak.
-:80 {
+# Browsers need HTTPS (Keycloak's login uses Web Crypto, only available in secure contexts), so
+# Caddy serves HTTPS with its own local certificate authority: install its root certificate once per
+# device (see docs/deployment.md). MediaPlayers use plain HTTP on the LAN through a separate port.
+{
+	# IP addresses carry no SNI: present the certificate for the public host by default.
+	default_sni {$PUBLIC_HOST}
+	# The internal CA lives in the caddy-data volume; nothing is fetched from the internet.
+	local_certs
+	skip_install_trust
+	# Port 80 serves MediaPlayers over HTTP; no automatic HTTP→HTTPS redirect there.
+	auto_https disable_redirects
+}
+
+# Web app, API, live stream, Keycloak (/auth) for browsers.
+https://{$PUBLIC_HOST}:443 {
+	tls internal
 	encode zstd gzip
 
 	@keycloak path /auth /auth/*
@@ -8,5 +22,30 @@
 	reverse_proxy server:8090 {
 		# Live state is streamed (Server-Sent Events): pass bytes through as they come.
 		flush_interval -1
+	}
+}
+
+# Media downloads for browsers (presigned S3 URLs; the Host header is kept, so signatures match).
+https://{$PUBLIC_HOST}:8443 {
+	tls internal
+	reverse_proxy seaweedfs:8333
+}
+
+# MediaPlayers (WebSocket) and the root certificate download, over plain HTTP on the LAN.
+http://:80 {
+	handle /webpresenter-ca.crt {
+		root * /data/caddy/pki/authorities/local
+		rewrite * /root.crt
+		header Content-Type application/x-x509-ca-cert
+		file_server
+	}
+	handle /ws/player {
+		reverse_proxy server:8090
+	}
+	handle /actuator/health {
+		reverse_proxy server:8090
+	}
+	handle {
+		respond "webpresenter: use {$PUBLIC_URL} in the browser" 404
 	}
 }

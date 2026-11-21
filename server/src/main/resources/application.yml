@@ -36,6 +36,7 @@ webpresenter:
   storage:
     endpoint: ${WEBPRESENTER_S3_ENDPOINT:http://localhost:8333}
     public-endpoint: ${WEBPRESENTER_S3_PUBLIC_ENDPOINT:http://localhost:8333}
+    player-endpoint: ${WEBPRESENTER_S3_PLAYER_ENDPOINT:}
     region: us-east-1
     access-key: ${WEBPRESENTER_S3_ACCESS_KEY:webpresenter}
     secret-key: ${WEBPRESENTER_S3_SECRET_KEY:webpresenter-dev-secret}

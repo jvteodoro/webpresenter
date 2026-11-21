@@ -7,14 +7,37 @@ development infrastructure (`deploy/compose.yaml`), so both can live on the same
 
 | Service | Role | Exposed |
 |---|---|---|
-| `proxy` (Caddy) | Single public address: web app, API, player WebSocket, live stream, Keycloak under `/auth` | `PUBLIC_PORT` |
+| `proxy` (Caddy) | HTTPS for browsers (web app, API, live stream, Keycloak under `/auth`, media downloads); HTTP for MediaPlayers and the root certificate | `PUBLIC_PORT`, `S3_BROWSER_PORT`, `PLAYER_PORT` |
 | `server` | Central server with the web app bundled | internal |
 | `keycloak` | Users and roles (production mode, behind the proxy at `/auth`) | internal |
 | `postgres` | Application and Keycloak databases | internal |
 | `seaweedfs` | Media store: S3 for downloads, filer for replication | `S3_PUBLIC_PORT`, `FILER_PORT`, `FILER_GRPC_PORT` |
 | `replication` (profile) | `weed filer.sync` with another SeaweedFS | outbound only |
 
-Players use `PUBLIC_URL` as their server URL and download media from `S3_PUBLIC_URL`.
+Browsers use `PUBLIC_URL` (HTTPS). MediaPlayers use `http://PUBLIC_HOST:PLAYER_PORT` as their
+server URL and download media over HTTP from `S3_PUBLIC_PORT`, so they need no certificate.
+
+## HTTPS on the local network
+
+Browsers only allow the cryptography used by the sign-in (Web Crypto, PKCE) on HTTPS pages, so
+the panel is served over HTTPS even on a LAN without internet. Caddy runs its own certificate
+authority (kept in the `caddy-data` volume) and issues the certificate for `PUBLIC_HOST`.
+
+Install the root certificate **once on every computer, phone or tablet** that opens the panel
+(otherwise the browser shows a security warning that has to be accepted). Download it from
+`http://PUBLIC_HOST:PLAYER_PORT/webpresenter-ca.crt`, then:
+
+| System | How to trust it |
+|---|---|
+| Windows | Open the file → Install Certificate → Local Machine → "Trusted Root Certification Authorities". |
+| macOS | Open the file → Keychain Access, System keychain → certificate → Trust → "Always Trust". |
+| Android | Settings → Security → Encryption & credentials → Install a certificate → CA certificate. |
+| iPhone/iPad | Open the link in Safari → install the profile → Settings → General → About → Certificate Trust Settings → enable it. |
+| Linux | Copy to `/usr/local/share/ca-certificates/` and run `update-ca-certificates`; Chrome/Firefox may need it imported in their own certificate settings. |
+| Firefox (any) | Settings → Privacy & Security → Certificates → View Certificates → Authorities → Import. |
+
+Keep the `caddy-data` volume (back it up): it holds the authority's private key. Moving the
+installation to another computer with a copy of that volume keeps every device trusting it.
 
 ## First installation
 

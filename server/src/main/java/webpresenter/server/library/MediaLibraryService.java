@@ -145,6 +145,11 @@ class MediaLibraryService implements MediaCatalog {
     }
 
     @Override
+    public PresignedUrl playerDownloadUrl(UUID id) {
+        return store.presignedPlayerDownload(get(id).storageKey(), properties.downloadUrlValidity());
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Optional<MediaFile> find(UUID id) {
         return repository.findById(id).map(a -> new MediaFile(a.id(), a.title(), a.kind(), a.contentType(),

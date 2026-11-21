@@ -66,7 +66,8 @@ class SongIntegrationTests {
                 .andExpect(jsonPath("$.songs[0].firstLine").value("Castelo forte é nosso Deus"));
 
         // A recording (library audio, song purpose) with timing.
-        String audio = upload(TestMedia.audio(dir), "castelo.m4a", "SONG_AUDIO");
+        // Unique content: an identical file uploaded earlier (as GENERAL) would be reused as is.
+        String audio = upload(TestMedia.tone(dir, 5300 + (int) (System.nanoTime() % 1000)), "castelo.m4a", "SONG_AUDIO");
         String detail = send(post("/api/songs/" + song + "/recordings"), tech(), """
                 {"kind":"SUNG","mediaId":"%s","timing":{"source":"MANUAL","reviewed":true,
                  "cues":[{"slide":0,"startMs":0},{"slide":1,"startMs":1000},{"slide":4,"startMs":2500}]}}

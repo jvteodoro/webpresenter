@@ -23,11 +23,15 @@ class S3MediaStore implements MediaStore, ApplicationRunner {
 
     private final S3Client s3;
     private final S3Presigner presigner;
+    private final S3Presigner playerPresigner;
     private final String bucket;
 
-    S3MediaStore(S3Client s3, S3Presigner presigner, StorageProperties props) {
+    S3MediaStore(S3Client s3, @org.springframework.beans.factory.annotation.Qualifier("s3Presigner") S3Presigner presigner,
+            @org.springframework.beans.factory.annotation.Qualifier("s3PlayerPresigner") S3Presigner playerPresigner,
+            StorageProperties props) {
         this.s3 = s3;
         this.presigner = presigner;
+        this.playerPresigner = playerPresigner;
         this.bucket = props.bucket();
     }
 
@@ -49,7 +53,16 @@ class S3MediaStore implements MediaStore, ApplicationRunner {
 
     @Override
     public PresignedUrl presignedDownload(String key, Duration validity) {
-        var request = presigner.presignGetObject(p -> p
+        return presign(presigner, key, validity);
+    }
+
+    @Override
+    public PresignedUrl presignedPlayerDownload(String key, Duration validity) {
+        return presign(playerPresigner, key, validity);
+    }
+
+    private PresignedUrl presign(S3Presigner signer, String key, Duration validity) {
+        var request = signer.presignGetObject(p -> p
                 .signatureDuration(validity)
                 .getObjectRequest(g -> g.bucket(bucket).key(key)));
         return new PresignedUrl(URI.create(request.url().toString()), Instant.now().plus(validity));

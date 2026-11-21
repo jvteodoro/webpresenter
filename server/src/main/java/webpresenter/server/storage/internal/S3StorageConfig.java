@@ -29,8 +29,17 @@ class S3StorageConfig {
 
     @Bean(destroyMethod = "close")
     S3Presigner s3Presigner(StorageProperties props) {
+        return presigner(props, props.publicEndpoint());
+    }
+
+    @Bean(destroyMethod = "close")
+    S3Presigner s3PlayerPresigner(StorageProperties props) {
+        return presigner(props, props.playerEndpoint());
+    }
+
+    private static S3Presigner presigner(StorageProperties props, java.net.URI endpoint) {
         return S3Presigner.builder()
-                .endpointOverride(props.publicEndpoint())
+                .endpointOverride(endpoint)
                 .region(Region.of(props.region()))
                 .credentialsProvider(credentials(props))
                 .serviceConfiguration(PATH_STYLE)
