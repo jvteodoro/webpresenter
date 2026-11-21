@@ -38,3 +38,13 @@
 .error {
   color: var(--mat-sys-error);
 }
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+@media (max-width: 600px) {
+  .card {
+    padding: 0.75rem;
+  }
+}

@@ -35,7 +35,7 @@ describe('MediaTable', () => {
   });
 
   it('offers management actions only to users who can manage the library', () => {
-    expect(render(false).querySelector('[mattooltip="Mais ações"]')).toBeNull();
-    expect(render(true).querySelector('[mattooltip="Mais ações"]')).not.toBeNull();
+    expect(render(false).querySelector('[aria-label="Mais ações"]')).toBeNull();
+    expect(render(true).querySelector('[aria-label="Mais ações"]')).not.toBeNull();
   });
 });

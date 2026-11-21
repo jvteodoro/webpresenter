@@ -7,13 +7,18 @@
     </a>
   </nav>
   <span class="spacer"></span>
-  @if (currentUser.user(); as user) {
-    <button mat-button [matMenuTriggerFor]="userMenu" class="user">
+  @if (currentUser.user()) {
+    <button mat-button [matMenuTriggerFor]="userMenu" class="user" [attr.aria-label]="currentUser.displayName()">
       <mat-icon>account_circle</mat-icon>
-      {{ currentUser.displayName() }}
+      <span class="user-name">{{ currentUser.displayName() }}</span>
     </button>
     <mat-menu #userMenu="matMenu" xPosition="before">
-      <div class="roles" mat-menu-item disabled>{{ user.roles.join(', ') }}</div>
+      <div mat-menu-item disabled>
+        <div class="menu-user">
+          <span>{{ currentUser.displayName() }}</span>
+          <span class="roles">{{ currentUser.roleLabels().join(', ') }}</span>
+        </div>
+      </div>
       <button mat-menu-item (click)="currentUser.logout()">
         <mat-icon>logout</mat-icon>
         Sair

@@ -44,7 +44,11 @@ cd web && npm install && npm start
 ```
 
 Build and test everything Java: `./gradlew build` (the server tests use Testcontainers, so Docker
-must be running). Web: `cd web && npm test`.
+must be running). Web unit tests: `cd web && npm test`.
+
+End-to-end tests (Playwright, Chromium and Firefox) run against the real stack: start the Compose
+infrastructure and the server, then `cd web && npx playwright install chromium firefox` (once) and
+`npm run e2e`. The Angular dev server is started automatically if needed.
 
 ### Development users (Keycloak realm `webpresenter`)
 

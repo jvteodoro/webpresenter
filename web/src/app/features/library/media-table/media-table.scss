@@ -31,4 +31,17 @@
   .mat-column-createdAt {
     display: none;
   }
+
+  .mat-mdc-cell,
+  .mat-mdc-header-cell {
+    padding: 0 6px;
+  }
+
+  .mat-column-kind {
+    width: 2rem;
+  }
+
+  .title {
+    word-break: break-word;
+  }
 }

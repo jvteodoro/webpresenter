@@ -38,12 +38,14 @@
       }
     </p>
   } @else {
-    <app-media-table
-      [items]="visible()"
-      [canManage]="currentUser.canManageLibrary()"
-      (preview)="openPreview($event)"
-      (rename)="openRename($event)"
-      (remove)="confirmDelete($event)"
-    />
+    <div class="table-scroll">
+      <app-media-table
+        [items]="visible()"
+        [canManage]="currentUser.canManageLibrary()"
+        (preview)="openPreview($event)"
+        (rename)="openRename($event)"
+        (remove)="confirmDelete($event)"
+      />
+    </div>
   }
 </section>

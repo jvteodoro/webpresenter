@@ -7,6 +7,13 @@ import { environment } from '../../../environments/environment';
 /** Fixed global roles, as returned by the server. */
 export type Role = 'ADMIN' | 'AV_TECHNICIAN' | 'WORSHIP_LEADER' | 'MUSICIAN';
 
+export const ROLE_LABELS: Record<Role, string> = {
+  ADMIN: 'Administrador',
+  AV_TECHNICIAN: 'Técnico de áudio e vídeo',
+  WORSHIP_LEADER: 'Líder de louvor',
+  MUSICIAN: 'Músico',
+};
+
 export interface User {
   username: string;
   displayName: string | null;
@@ -26,6 +33,7 @@ export class CurrentUser {
     const user = this.state();
     return user?.displayName || user?.username || '';
   });
+  readonly roleLabels = computed(() => (this.state()?.roles ?? []).map((role) => ROLE_LABELS[role] ?? role));
   /** May add, rename and remove library media. */
   readonly canManageLibrary = computed(() => this.hasAnyRole('ADMIN', 'AV_TECHNICIAN'));
 

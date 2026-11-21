@@ -26,8 +26,35 @@
   flex: 1;
 }
 
+.menu-user {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.3;
+}
+
 .roles {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
+}
+
+@media (max-width: 600px) {
+  .toolbar {
+    gap: 0.25rem;
+    padding: 0 0.5rem;
+  }
+
+  // Keep only the icon; the name is shown inside the menu.
+  .user-name {
+    display: none;
+  }
+
+  .user {
+    min-width: 0;
+  }
+
+  .content {
+    padding: 1rem 0.75rem;
+  }
 }
 
 .content {
