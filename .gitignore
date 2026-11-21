@@ -1,0 +1,17 @@
+# Gradle / Java
+.gradle/
+build/
+*.class
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# Local environment
+deploy/.env
+*.log

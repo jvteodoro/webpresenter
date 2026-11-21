@@ -1,6 +1,6 @@
 # MVP
 
-The MVP focuses on the **MediaPlayer** and on the minimum frontend and central server features needed to play media on it. It is a thin vertical slice: upload media through the web, store it in MinIO, build a simple event, pre-cache it on the player, and control playback live from the web.
+The MVP focuses on the **MediaPlayer** and on the minimum frontend and central server features needed to play media on it. It is a thin vertical slice: upload media through the web, store it in the S3 store (SeaweedFS), build a simple event, pre-cache it on the player, and control playback live from the web.
 
 See `architecture.md` for the overall architecture and decisions.
 
@@ -8,7 +8,7 @@ See `architecture.md` for the overall architecture and decisions.
 
 ### In scope
 - Web login through Keycloak (fixed global roles).
-- Media upload through the web (video, audio, image files) stored in MinIO.
+- Media upload through the web (video, audio, image files) stored in SeaweedFS (S3 API).
 - Simple event: a flat, ordered list of items. Each item is either a media asset or a text slide.
 - MediaPlayer connection by configured server URL, appearing as *pending* until an operator approves it.
 - Mandatory pre-cache of the event's media on the player, with integrity check (sha256).
@@ -68,7 +68,7 @@ Design rules:
 | Module | MVP responsibility |
 |---|---|
 | `identity` | Validate Keycloak JWTs, map realm roles. |
-| `storage` | Upload to MinIO, generate presigned download URLs. |
+| `storage` | Upload to the S3 store, generate presigned download URLs. |
 | `library` | Media asset registry (type, sha256, size, duration via ffprobe), upload endpoint. |
 | `planning` | Event as a flat ordered list of items (media or text slide). |
 | `devices` | Player connection, pending/approval, device token, configuration, rest screen. |
@@ -86,9 +86,9 @@ Design rules:
 
 | # | Deliverable |
 |---|---|
-| M0 | **Player spike**: compare VLCJ and mpv with JavaFX overlay and fade on Linux and Windows. Decides the playback engine. |
-| M1 | Monorepo skeleton, Docker Compose (PostgreSQL, Keycloak, MinIO), build. |
-| M2 | Library: upload through the web, MinIO storage, listing. |
+| M0 ✅ | **Player spike**: mpv with JavaFX overlay and fade. Decision: libmpv (see results below). |
+| M1 ✅ | Monorepo skeleton, Docker Compose (PostgreSQL, Keycloak, SeaweedFS), build. |
+| M2 | Library: upload through the web, S3 storage, listing. |
 | M3 | Protocol, player connection, and device approval. |
 | M4 | Event with items, pre-cache on the player. |
 | M5 | Live control, playback, rest screen, fade. **MVP complete.** |
@@ -104,3 +104,11 @@ Evaluation criteria:
 4. Audio-only playback.
 5. Smoothness (no visible tearing, acceptable CPU usage for 1080p).
 6. Works on Linux and Windows; packaging effort (bundling native libraries).
+
+### Outcome
+
+**libmpv was chosen.** Through its software render API it met every criterion on Linux:
+1080p30 at a steady frame rate, ~1.3 ms per frame to fill the JavaFX buffer, ~30–40% of one
+core for the whole process with software decoding (Intel i7-8650U), correct overlay
+composition and fades, 4 ms shutdown. The VLCJ comparison was dropped. Windows validation
+remains open (see `architecture.md`). Details and pitfalls: `spikes/player-engine/README.md`.

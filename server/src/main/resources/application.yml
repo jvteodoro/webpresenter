@@ -1,0 +1,35 @@
+server:
+  port: ${WEBPRESENTER_PORT:8090}
+
+spring:
+  application:
+    name: webpresenter-server
+  datasource:
+    url: ${WEBPRESENTER_DB_URL:jdbc:postgresql://localhost:5432/webpresenter}
+    username: ${WEBPRESENTER_DB_USER:webpresenter}
+    password: ${WEBPRESENTER_DB_PASSWORD:webpresenter}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${WEBPRESENTER_OIDC_ISSUER:http://localhost:8180/realms/webpresenter}
+
+webpresenter:
+  cors:
+    allowed-origins: ${WEBPRESENTER_CORS_ORIGINS:http://localhost:4200}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true

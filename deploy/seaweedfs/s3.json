@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "webpresenter-server",
+      "credentials": [
+        {
+          "accessKey": "webpresenter",
+          "secretKey": "webpresenter-dev-secret"
+        }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

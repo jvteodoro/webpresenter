@@ -13,11 +13,11 @@ This document records the architectural decisions for the system. See `business.
 | Frontend | Angular, component-oriented. Android delivered as PWA first, Capacitor when native features are needed. |
 | Identity | Keycloak (registration, fixed global roles, token generation). |
 | Database | PostgreSQL (shared by the application and Keycloak, separate databases). |
-| Media storage | MinIO (S3 API) from day one. |
+| Media storage | SeaweedFS (S3 API) from day one. MinIO was the first choice, but it stopped publishing community binaries and images in 2025. |
 | Real-time communication | WebSocket for frontend clients and MediaPlayers. |
 | Job queue | RabbitMQ between the central server and the media workers. |
 | Media processing | Python workers (yt-dlp, ffmpeg, Whisper/WhisperX, Demucs). |
-| MediaPlayer | Java + JavaFX + native playback (VLCJ/libVLC or mpv, pending spike). |
+| MediaPlayer | Java + JavaFX + libmpv (software render API, bindings through the Java FFM API). Decided by the M0 spike. |
 | Media delivery to players | Mandatory pre-cache before the event. |
 | Player behavior on server loss | Finish the current item, show the rest screen, reconnect. |
 | Synchronization | Frame-accurate within one MediaPlayer host. About 100 ms tolerance across hosts (NTP-scheduled start). |
@@ -33,7 +33,7 @@ Everything runs inside the venue's network. A single machine hosts the server st
  ┌─────────────────────── Server host (Docker Compose) ───────────────────────┐
  │                                                                             │
  │  ┌──────────────────┐   ┌──────────┐   ┌────────────┐   ┌──────────────┐    │
- │  │  Central server  │──▶│ Keycloak │   │ PostgreSQL │   │    MinIO     │    │
+ │  │  Central server  │──▶│ Keycloak │   │ PostgreSQL │   │  SeaweedFS   │    │
  │  │ (Spring Modulith)│──────────────────▶│            │   │    (S3)      │    │
  │  └───┬───────┬──────┘   └──────────┘   └────────────┘   └──────▲───────┘    │
  │      │       │                                                 │            │
@@ -71,7 +71,7 @@ Authentication and access control always live in the central server. Components 
 | `planning` | Event (service) planning: steps, groups, titles, text slides, event roles (prayer, tithing, announcements…) and the people responsible for them. |
 | `live` | Live execution of an event as a state machine (current item, next item, skip, jump, reorder, replace) and real-time broadcast through WebSocket. |
 | `devices` | MediaPlayer registry: mDNS announcement, pending/approved devices, credential issuance, configuration of screens and audio outputs, rest screen and transitions, cache status. |
-| `storage` | Abstraction over the S3 API. Uploads and presigned URLs for direct downloads from MinIO. |
+| `storage` | Abstraction over the S3 API. Uploads and presigned URLs for direct downloads from the S3 store. |
 
 Example event flow: when an event is published in `planning`, `devices` reacts and instructs each relevant MediaPlayer to pre-cache the event's media.
 
@@ -97,18 +97,18 @@ Event roles (prayer, tithing collection, announcements…) are informational ass
 
 The MediaPlayer handles media playback. It is a desktop application (not only a background service) because it must render playback windows on the host. It runs on Unix-like systems and Windows.
 
-- **Technology**: Java + JavaFX for windowing and overlays (lyrics, slides, transitions) on top of native playback through VLCJ (libVLC) or mpv. The choice between them is pending a spike (see *Open items*).
+- **Technology**: Java + JavaFX for windowing and overlays (lyrics, slides, transitions) on top of libmpv. mpv decodes and converts each frame into a native buffer backing a JavaFX `PixelBuffer` (software render API), so JavaFX composes overlays and transitions over the video on every platform. Bindings use the Java FFM API. See `spikes/player-engine/README.md` for the evaluation and its pitfalls.
 - **Registration**: the central server announces itself on the LAN via mDNS. A new player discovers the server and shows up as *pending* in the admin panel. An operator approves and names it, and only then does the server issue the device credential. Each player has a unique, persistent ID.
 - **Configuration**: all parameters (screens, audio outputs, rest screen, transitions) are managed by the central server and pushed to the player.
 - **Multiple outputs**: a player can take control of one or more screens and audio outputs and play different media on different screens.
-- **Pre-cache**: when an event is published or opened, the player downloads all of its items to a local cache through presigned URLs directly from MinIO and reports progress. An event is *ready* only when every relevant player has confirmed its cache. Items added during a live event are downloaded on demand, and the UI shows when they become available.
+- **Pre-cache**: when an event is published or opened, the player downloads all of its items to a local cache through presigned URLs directly from the S3 store and reports progress. An event is *ready* only when every relevant player has confirmed its cache. Items added during a live event are downloaded on demand, and the UI shows when they become available.
 - **Rest screen**: a configurable image, video, or animation kept in the local cache. When the central server changes it, it sends the new asset and parameters to the player.
 - **Transitions**: configurable fade in, fade out, and others.
 - **Failure behavior**: if the connection to the central server is lost, the player finishes the current item, shows the rest screen, and keeps trying to reconnect.
 
 ## Media storage
 
-Media is stored in MinIO through the S3 API from the start. Because the code depends only on the S3 API, the storage can later move to a dedicated NAS or a distributed S3-compatible store (for example, SeaweedFS or Garage) by changing configuration, not code.
+Media is stored in SeaweedFS through its S3 API from the start (single node in the default installation). Because the code depends only on the S3 API, the storage can later move to a dedicated NAS, a multi-node SeaweedFS cluster, or another S3-compatible store by changing configuration, not code.
 
 The main media type is music. It is usually acquired from YouTube, where lyrics are embedded in the video, so their size, color, and position cannot be changed. To support that flexibility, the system stores:
 
@@ -121,7 +121,7 @@ Songs are stored in **ChordPro**, extended with per-line (and optionally per-wor
 
 ## Media processing pipeline
 
-Media processing runs in Python workers deployed as their own container (GPU optional), consuming jobs from RabbitMQ and reading/writing media in MinIO. The central server's `ingestion` module orchestrates the jobs and tracks their status.
+Media processing runs in Python workers deployed as their own container (GPU optional), consuming jobs from RabbitMQ and reading/writing media in the S3 store. The central server's `ingestion` module orchestrates the jobs and tracks their status.
 
 Pipeline stages:
 
@@ -150,7 +150,8 @@ The event is executed and each item is played, with transitions if configured. T
 
 ## Open items
 
-- **Playback engine spike**: compare VLCJ and mpv for rendering JavaFX overlays (lyrics, transitions) over video, on multiple screens, on Linux and Windows.
+- **MediaPlayer on Windows**: run the player engine spike on Windows (libmpv DLL bundling, performance).
+- **Hardware decoding**: pick a tested `hwdec` per platform; the spike runs with software decoding.
 - **Lyrics alignment quality**: evaluate WhisperX forced alignment on worship music, with and without Demucs vocal isolation.
 - **Extended ChordPro specification**: define the exact syntax for line and word timestamps.
 - **Live edits and pre-cache**: define the UX when an item is added during a live event and its media is not cached yet.

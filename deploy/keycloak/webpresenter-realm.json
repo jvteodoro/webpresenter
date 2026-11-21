@@ -1,0 +1,143 @@
+{
+  "realm": "webpresenter",
+  "displayName": "webpresenter",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "internationalizationEnabled": true,
+  "supportedLocales": [
+    "pt-BR",
+    "en"
+  ],
+  "defaultLocale": "pt-BR",
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Configuração do sistema, usuários e dispositivos"
+      },
+      {
+        "name": "av-technician",
+        "description": "Técnico de áudio e vídeo: biblioteca de mídia e dispositivos"
+      },
+      {
+        "name": "worship-leader",
+        "description": "Líder de louvor: planeja e controla os eventos ao vivo"
+      },
+      {
+        "name": "musician",
+        "description": "Músico: acompanha o evento ao vivo, letras e cifras"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "webpresenter-web",
+      "name": "webpresenter web",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://localhost:4200/*"
+      ],
+      "webOrigins": [
+        "http://localhost:4200"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:4200/*"
+      }
+    },
+    {
+      "clientId": "webpresenter-dev-cli",
+      "name": "Development only: password grant for scripts and manual API tests",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Admin",
+      "lastName": "Sistema",
+      "email": "admin@webpresenter.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-webpresenter",
+        "admin",
+        "av-technician",
+        "worship-leader",
+        "musician"
+      ]
+    },
+    {
+      "username": "tecnico",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Técnico",
+      "lastName": "AV",
+      "email": "tecnico@webpresenter.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "tecnico",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-webpresenter",
+        "av-technician"
+      ]
+    },
+    {
+      "username": "lider",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Líder",
+      "lastName": "de Louvor",
+      "email": "lider@webpresenter.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "lider",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-webpresenter",
+        "worship-leader"
+      ]
+    },
+    {
+      "username": "musico",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Músico",
+      "lastName": "Banda",
+      "email": "musico@webpresenter.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "musico",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-webpresenter",
+        "musician"
+      ]
+    }
+  ]
+}
