@@ -79,9 +79,13 @@ class SongIntegrationTests {
         send(put("/api/songs/" + song + "/recordings/" + recording + "/timing"), tech(),
                 "{\"cues\":[{\"slide\":9,\"startMs\":0}]}").andExpect(status().isBadRequest());
 
-        // Changing the lyrics flags the timing as out of date.
+        // Changing the lyrics flags the timing as out of date; resending the same collections works.
         send(put("/api/songs/" + song), tech(), """
-                {"title":"Castelo Forte","status":"READY","lyrics":%s}""".formatted(LYRICS.replace("\"c\",\"c\"", "\"c\"")))
+                {"title":"Castelo Forte","status":"READY","lyrics":%s,
+                 "collections":[{"slug":"hinario-teste","name":"Hinário Teste","group":"Hinários","number":"34"}]}
+                """.formatted(LYRICS.replace("\"c\",\"c\"", "\"c\"")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.collections[0].number").value("34"))
                 .andExpect(jsonPath("$.lyricsVersion").value(2))
                 .andExpect(jsonPath("$.recordings[0].timingCurrent").value(false));
 

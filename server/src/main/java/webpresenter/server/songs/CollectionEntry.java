@@ -37,6 +37,10 @@ class CollectionEntry {
         this.number = number;
     }
 
+    void renumber(String number) {
+        this.number = number;
+    }
+
     SongCollection collection() { return collection; }
     String number() { return number; }
 }

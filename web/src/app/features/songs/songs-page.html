@@ -1,0 +1,68 @@
+<header class="page-header">
+  <h1>Músicas</h1>
+  @if (page(); as p) {
+    <span class="count">{{ p.total }} {{ p.total === 1 ? 'música' : 'músicas' }}</span>
+  }
+</header>
+
+<section class="filters">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search">
+    <mat-icon matPrefix>search</mat-icon>
+    <mat-label>Buscar por título ou letra</mat-label>
+    <input matInput [ngModel]="query()" (ngModelChange)="setQuery($event)" />
+  </mat-form-field>
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="collection">
+    <mat-label>Coleção</mat-label>
+    <mat-select [value]="collection()" (valueChange)="setCollection($event)">
+      <mat-option [value]="null">Todas</mat-option>
+      @for (g of groups(); track g.name) {
+        <mat-optgroup [label]="g.name">
+          @for (c of g.items; track c.slug) {
+            <mat-option [value]="c.slug">{{ c.name }}</mat-option>
+          }
+        </mat-optgroup>
+      }
+    </mat-select>
+  </mat-form-field>
+</section>
+
+@if (loading()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+@if (page(); as p) {
+  @if (p.songs.length === 0) {
+    <p class="empty">Nenhuma música encontrada.</p>
+  } @else {
+    <ul class="list">
+      @for (s of p.songs; track s.id) {
+        <li>
+          <a class="song" [routerLink]="['/musicas', s.id]">
+            <mat-icon class="icon">music_note</mat-icon>
+            <span class="main">
+              <span class="title">{{ s.title }}</span>
+              @if (s.firstLine && s.firstLine !== s.title) {
+                <span class="first-line">{{ s.firstLine }}</span>
+              }
+              <span class="collections">
+                @for (c of s.collections; track c.slug) {
+                  <span class="chip">{{ c.name }}@if (c.number) { · {{ c.number }} }</span>
+                }
+              </span>
+            </span>
+            <span class="badges">
+              @for (r of s.recordings; track r) {
+                <span class="badge">{{ recordingLabels[r] }}</span>
+              }
+              @if (s.status === 'DRAFT') {
+                <span class="badge draft">Rascunho</span>
+              }
+            </span>
+          </a>
+        </li>
+      }
+    </ul>
+    <mat-paginator [length]="p.total" [pageSize]="pageSize" [pageIndex]="p.offset / pageSize" [hidePageSize]="true"
+                   (page)="onPage($event)" aria-label="Páginas de músicas" />
+  }
+}

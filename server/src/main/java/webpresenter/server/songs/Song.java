@@ -142,10 +142,20 @@ class Song {
                 .orElseThrow(() -> new SongService.NotFoundException("recording " + recordingId + " not found"));
     }
 
-    void setCollections(List<CollectionEntry> entries) {
-        collections.clear();
-        collections.addAll(entries);
+    /**
+     * Sets the collections the song is in. Existing entries are updated in place: Hibernate inserts
+     * before it deletes, so replacing an entry for the same collection would break the unique key.
+     */
+    void setCollections(List<CollectionInput> wanted) {
+        collections.removeIf(e -> wanted.stream().noneMatch(w -> w.collection().id().equals(e.collection().id())));
+        for (CollectionInput w : wanted) {
+            collections.stream().filter(e -> e.collection().id().equals(w.collection().id())).findFirst()
+                    .ifPresentOrElse(e -> e.renumber(w.number()),
+                            () -> collections.add(new CollectionEntry(this, w.collection(), w.number())));
+        }
     }
+
+    record CollectionInput(SongCollection collection, String number) {}
 
     void touch(Instant now) {
         this.updatedAt = now;

@@ -37,6 +37,19 @@ export default async function globalSetup(): Promise<void> {
     `${FIXTURES_DIR}/slide.png`,
   );
 
+  // Unique per run: the library de-duplicates identical files.
+  ffmpeg(
+    '-f',
+    'lavfi',
+    '-i',
+    `sine=frequency=${200 + (Date.now() % 3000)}`,
+    '-t',
+    '12',
+    '-c:a',
+    'aac',
+    `${FIXTURES_DIR}/song.m4a`,
+  );
+
   const health = await fetch('http://localhost:8090/actuator/health').catch(() => null);
   if (!health?.ok) {
     throw new Error('Central server is not running on :8090 (run ./gradlew :server:bootRun)');

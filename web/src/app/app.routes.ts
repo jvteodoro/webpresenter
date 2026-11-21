@@ -18,6 +18,16 @@ export const routes: Routes = [
     loadComponent: () => import('./features/events/event-editor/event-editor-page').then((m) => m.EventEditorPage),
   },
   {
+    path: 'musicas',
+    title: 'Músicas · webpresenter',
+    loadComponent: () => import('./features/songs/songs-page').then((m) => m.SongsPage),
+  },
+  {
+    path: 'musicas/:id',
+    title: 'Música · webpresenter',
+    loadComponent: () => import('./features/songs/song-page/song-page').then((m) => m.SongPage),
+  },
+  {
     path: 'biblioteca',
     title: 'Biblioteca · webpresenter',
     loadComponent: () => import('./features/library/library-page').then((m) => m.LibraryPage),

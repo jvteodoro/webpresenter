@@ -1,0 +1,153 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+
+  .titles {
+    flex: 1;
+    min-width: 0;
+  }
+
+  h1 {
+    margin: 0;
+    font: var(--mat-sys-headline-small);
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.25rem;
+    font-size: 0.85rem;
+  }
+}
+
+.chip {
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.card {
+  padding: 1rem;
+  border-radius: var(--mat-sys-corner-large);
+  background: var(--mat-sys-surface-container-low);
+  border: 1px solid var(--mat-sys-outline-variant);
+}
+
+.player {
+  position: sticky;
+  top: 4.5rem;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+
+  audio {
+    width: 100%;
+  }
+}
+
+.timing-state {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.warn {
+  color: var(--mat-sys-tertiary);
+}
+
+.section-title {
+  margin: 0 0 0.75rem;
+  font: var(--mat-sys-title-medium);
+}
+
+.sequence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.part-label {
+  margin-top: 0.5rem;
+  font: var(--mat-sys-label-large);
+  color: var(--mat-sys-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.slide {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--mat-sys-corner-medium);
+  border: 1px solid var(--mat-sys-outline-variant);
+  background: var(--mat-sys-surface);
+  transition: background 150ms, color 150ms;
+
+  &.clickable {
+    cursor: pointer;
+  }
+
+  &.instrumental {
+    background: transparent;
+    border-style: dashed;
+  }
+
+  // The slide on screen for the current audio position: shown like the output (text over background).
+  &.active {
+    background: linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55)), var(--bg, #1d2b53) center / cover;
+    color: #fff;
+    border-color: var(--mat-sys-primary);
+
+    .time,
+    .cue {
+      color: #fff;
+    }
+  }
+}
+
+.time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+}
+
+.cue {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--mat-sys-tertiary);
+}
+
+.line {
+  font-size: 1.05rem;
+}
+
+.error {
+  color: var(--mat-sys-error);
+}

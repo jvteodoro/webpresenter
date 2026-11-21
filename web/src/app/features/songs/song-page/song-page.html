@@ -1,0 +1,77 @@
+@if (loadError()) {
+  <p class="error">Música não encontrada. <a routerLink="/musicas">Voltar às músicas</a></p>
+} @else if (song(); as s) {
+  <header class="page-header">
+    <a mat-icon-button routerLink="/musicas" aria-label="Voltar às músicas"><mat-icon>arrow_back</mat-icon></a>
+    <div class="titles">
+      <h1>{{ s.title }}</h1>
+      <div class="meta">
+        @for (c of s.collections; track c.slug) {
+          <span class="chip">{{ c.name }}@if (c.number) { · {{ c.number }} }</span>
+        }
+        @if (s.authors) { <span>{{ s.authors }}</span> }
+        @if (s.origin) { <span class="muted">importada do {{ s.origin === 'louvorja' ? 'LouvorJA' : s.origin }}</span> }
+      </div>
+    </div>
+    @if (currentUser.canEditSongs()) {
+      <button mat-stroked-button (click)="editLyrics()"><mat-icon>edit</mat-icon>Editar letra</button>
+    }
+  </header>
+
+  @if (s.recordings.length > 0) {
+    <section class="card player" aria-label="Gravações">
+      <mat-button-toggle-group [value]="selectedRecordingId()" (change)="selectRecording($event.value)" hideSingleSelectionIndicator>
+        @for (r of s.recordings; track r.id) {
+          <mat-button-toggle [value]="r.id">
+            {{ recordingLabels[r.kind] }} · {{ r.media.durationMs | duration }}
+          </mat-button-toggle>
+        }
+      </mat-button-toggle-group>
+      @if (audioUrl(); as url) {
+        <audio #audio [src]="url" controls preload="metadata" (timeupdate)="onTime()" (seeked)="onTime()"></audio>
+      }
+      @if (recording(); as r) {
+        <p class="timing-state">
+          @if (!r.timing) {
+            Sem tempos: os slides serão avançados manualmente.
+          } @else if (!r.timingCurrent) {
+            <mat-icon class="warn">warning</mat-icon> A letra mudou depois destes tempos; revise-os.
+          } @else {
+            {{ r.timing.cues.length }} marcações de tempo
+            · {{ r.timing.source === 'IMPORT' ? 'importadas' : r.timing.source === 'PIPELINE' ? 'automáticas' : 'manuais' }}
+            @if (!r.timing.reviewed) { · <span class="warn">não revisadas</span> }
+          }
+        </p>
+      }
+    </section>
+  }
+
+  <section class="card lyrics" [style.--bg]="backgroundUrl() ? 'url(' + backgroundUrl() + ')' : null" aria-label="Letra">
+    <h2 class="section-title">Letra · {{ s.slideSequence.length }} slides</h2>
+    <ol class="sequence">
+      @for (slide of s.slideSequence; track slide.index) {
+        @if (slide.slideInPart === 0) {
+          <li class="part-label" aria-hidden="true">{{ slide.partLabel }}</li>
+        }
+        <li [id]="'slide-' + slide.index" class="slide" [class.active]="slide.index === activeSlide()"
+            [class.instrumental]="slide.kind === 'INSTRUMENTAL'"
+            [class.clickable]="cueBySlide().has(slide.index)" (click)="seekTo(slide.index)">
+          <span class="time">
+            @if (cueBySlide().get(slide.index); as start) { {{ start | duration }} }
+            @else if (cueBySlide().get(slide.index) === 0) { 0:00 }
+          </span>
+          <span class="text">
+            @if (slide.cue) { <span class="cue">{{ slide.cue }}</span> }
+            @for (line of slide.lines; track $index) {
+              <span class="line">{{ line }}</span>
+            } @empty {
+              <span class="line muted">♪ instrumental</span>
+            }
+          </span>
+        </li>
+      }
+    </ol>
+  </section>
+} @else {
+  <mat-progress-bar mode="indeterminate" />
+}

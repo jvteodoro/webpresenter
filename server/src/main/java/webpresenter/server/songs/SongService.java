@@ -193,7 +193,7 @@ class SongService implements MediaUsage {
         song.replaceLyrics(json.writeValueAsString(lyrics), now);
         if (input.collections() != null) {
             song.setCollections(input.collections().stream()
-                    .map(c -> new CollectionEntry(song, collection(c), blankToNull(c.number())))
+                    .map(c -> new Song.CollectionInput(collection(c), blankToNull(c.number())))
                     .toList());
         }
         song.index(normalize(String.join(" ", input.title(),
