@@ -37,6 +37,14 @@
           <span class="roles">{{ currentUser.roleLabels().join(', ') }}</span>
         </div>
       </div>
+      <button mat-menu-item (click)="currentUser.changePassword()">
+        <mat-icon>password</mat-icon>
+        Trocar senha
+      </button>
+      <button mat-menu-item (click)="currentUser.openAccount()">
+        <mat-icon>manage_accounts</mat-icon>
+        Minha conta
+      </button>
       <button mat-menu-item (click)="currentUser.logout()">
         <mat-icon>logout</mat-icon>
         Sair

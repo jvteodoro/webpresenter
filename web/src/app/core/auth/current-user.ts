@@ -57,4 +57,14 @@ export class CurrentUser {
   logout(): Promise<void> {
     return this.keycloak.logout({ redirectUri: window.location.origin });
   }
+
+  /** Keycloak's own "update password" page (application-initiated action); comes back here when done. */
+  changePassword(): Promise<void> {
+    return this.keycloak.login({ action: 'UPDATE_PASSWORD', redirectUri: window.location.href });
+  }
+
+  /** Keycloak account console: personal data, password, active sessions. */
+  openAccount(): Promise<void> {
+    return this.keycloak.accountManagement();
+  }
 }
