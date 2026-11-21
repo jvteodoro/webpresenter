@@ -107,11 +107,11 @@ class SongIntegrationTests {
         // Unique content: the generated test files may already be in the shared test database.
         byte[] audio = Files.readAllBytes(TestMedia.tone(dir, 200 + (int) (System.nanoTime() % 5000)));
         String first = json.readTree(mvc.perform(multipart("/api/media").file(new MockMultipartFile("file", "a.m4a",
-                        "audio/mp4", audio)).param("purpose", "SONG_AUDIO").with(tech()))
+                        "audio/mp4", audio)).param("purpose", "SONG_AUDIO").param("deduplicate", "true").with(tech()))
                 .andExpect(status().is2xxSuccessful()).andReturn().getResponse().getContentAsString()).get("id").asString();
         // Same content again: same asset, 200.
         mvc.perform(multipart("/api/media").file(new MockMultipartFile("file", "copia.m4a", "audio/mp4", audio))
-                        .param("purpose", "SONG_AUDIO").with(tech()))
+                        .param("purpose", "SONG_AUDIO").param("deduplicate", "true").with(tech()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(first));
 

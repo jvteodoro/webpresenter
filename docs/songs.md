@@ -91,8 +91,9 @@ Per recording, one JSON document:
 
 Recordings and backgrounds are ordinary library assets with a **purpose** (`GENERAL`,
 `SONG_AUDIO`, `SONG_BACKGROUND`). The library page lists `GENERAL` by default so thousands of
-song files do not bury everyday media. Uploads are de-duplicated by SHA-256 (the same file is
-stored once).
+song files do not bury everyday media. Imports upload with `deduplicate=true`: a file whose
+SHA-256 is already stored is reused instead of stored again (uploads from the web app always create
+a new item, as people expect).
 
 ## Presenting
 

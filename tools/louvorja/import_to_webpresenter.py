@@ -62,7 +62,8 @@ class Api:
     def upload(self, path, purpose):
         with open(path, "rb") as f:
             r = self.session.post(f"{self.server}/api/media", headers=self.headers(),
-                                  files={"file": (path.name, f)}, data={"purpose": purpose}, timeout=600)
+                                  files={"file": (path.name, f)}, data={"purpose": purpose, "deduplicate": "true"},
+                                  timeout=600)
         if r.status_code not in (200, 201):
             raise RuntimeError(f"upload {path.name}: HTTP {r.status_code} {r.text[:200]}")
         return r.json()["id"]

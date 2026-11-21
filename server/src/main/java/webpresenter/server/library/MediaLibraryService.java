@@ -63,24 +63,27 @@ class MediaLibraryService implements MediaCatalog {
     @Transactional
     MediaAsset upload(InputStream content, String originalFilename, String declaredContentType, String title,
             String uploadedBy) {
-        return upload(content, originalFilename, declaredContentType, title, uploadedBy, MediaPurpose.GENERAL).asset();
+        return upload(content, originalFilename, declaredContentType, title, uploadedBy, MediaPurpose.GENERAL, false)
+                .asset();
     }
 
     /**
-     * Adds a file to the library: copies it to a temporary file while hashing it, returns the
-     * existing asset if the same content is already stored, otherwise inspects it with ffprobe,
-     * stores it and records its metadata.
+     * Adds a file to the library: copies it to a temporary file while hashing it, inspects it with
+     * ffprobe, stores it and records its metadata. With {@code deduplicate}, an existing asset with
+     * the same content is returned instead (used by imports; people uploading a file expect a new
+     * item with their title).
      */
     @Transactional
     Uploaded upload(InputStream content, String originalFilename, String declaredContentType, String title,
-            String uploadedBy, MediaPurpose purpose) {
+            String uploadedBy, MediaPurpose purpose, boolean deduplicate) {
         String filename = sanitizeFilename(originalFilename);
         Path temp = null;
         try {
             temp = Files.createTempFile("webpresenter-upload-", suffix(filename));
             String sha256 = copyAndHash(content, temp);
             long size = Files.size(temp);
-            var existing = repository.findFirstBySha256AndSizeBytes(sha256, size);
+            var existing = deduplicate ? repository.findFirstBySha256AndSizeBytes(sha256, size)
+                    : java.util.Optional.<MediaAsset>empty();
             if (existing.isPresent()) {
                 return new Uploaded(existing.get(), false);
             }

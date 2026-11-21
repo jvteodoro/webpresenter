@@ -42,9 +42,10 @@ class MediaController {
     ResponseEntity<MediaResponse> upload(@RequestParam("file") MultipartFile file,
             @RequestParam(value = "title", required = false) String title,
             @RequestParam(value = "purpose", defaultValue = "GENERAL") MediaPurpose purpose,
+            @RequestParam(value = "deduplicate", defaultValue = "false") boolean deduplicate,
             Authentication user) throws IOException {
         var uploaded = library.upload(file.getInputStream(), file.getOriginalFilename(), file.getContentType(),
-                title, user.getName(), purpose);
+                title, user.getName(), purpose, deduplicate);
         MediaResponse body = MediaResponse.of(uploaded.asset());
         // Same content already stored: 200 with the existing asset instead of a duplicate.
         return uploaded.created()
