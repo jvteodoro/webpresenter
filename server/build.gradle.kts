@@ -31,3 +31,11 @@ dependencies {
     testImplementation("org.awaitility:awaitility")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
+
+// ./gradlew :server:bootJar -PwithWeb bundles the web app (web/dist/web/browser, built beforehand
+// with `npm run build` in web/) so one process serves the API and the UI in production.
+if (project.hasProperty("withWeb")) {
+    tasks.named<ProcessResources>("processResources") {
+        from(rootProject.file("web/dist/web/browser")) { into("static") }
+    }
+}

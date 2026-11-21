@@ -27,7 +27,8 @@ class SecurityConfig {
                         // Players authenticate inside the WebSocket protocol with their device token.
                         .requestMatchers(ProtocolVersion.PLAYER_ENDPOINT).permitAll()
                         .requestMatchers("/api/**").authenticated()
-                        .anyRequest().denyAll())
+                        // Everything else is the bundled web app (static files and client routes).
+                        .anyRequest().permitAll())
                 .oauth2ResourceServer(rs -> rs.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtConverter)))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .csrf(csrf -> csrf.disable()) // no cookies: tokens are sent in the Authorization header

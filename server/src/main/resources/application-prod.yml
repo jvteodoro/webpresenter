@@ -1,0 +1,17 @@
+# Production profile: behind the reverse proxy, on the same origin as the web app and Keycloak (/auth).
+server:
+  forward-headers-strategy: framework
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Tokens are issued for the public URL; keys are fetched over the internal network.
+          issuer-uri: ${WEBPRESENTER_OIDC_ISSUER}
+          jwk-set-uri: ${WEBPRESENTER_OIDC_JWKS}
+
+webpresenter:
+  cors:
+    # Same origin in production.
+    allowed-origins: ${WEBPRESENTER_CORS_ORIGINS:}

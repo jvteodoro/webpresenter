@@ -1,0 +1,12 @@
+# One public address for everything: web app, API, player WebSocket, live stream and Keycloak.
+:80 {
+	encode zstd gzip
+
+	@keycloak path /auth /auth/*
+	reverse_proxy @keycloak keycloak:8080
+
+	reverse_proxy server:8090 {
+		# Live state is streamed (Server-Sent Events): pass bytes through as they come.
+		flush_interval -1
+	}
+}

@@ -1,0 +1,139 @@
+# Production stack. Configure deploy/.env.prod (see .env.prod.example), build with
+# deploy/build-prod.sh, then:
+#   docker compose -f deploy/compose.prod.yaml --env-file deploy/.env.prod up -d
+# Replication to another SeaweedFS: add `--profile replication` (see docs/deployment.md).
+name: webpresenter-prod
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: webpresenter
+      POSTGRES_USER: webpresenter
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./postgres/init-keycloak-db.sh:/docker-entrypoint-initdb.d/init-keycloak-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webpresenter -d webpresenter"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    restart: unless-stopped
+    command:
+      - start
+      - --import-realm
+      - --http-enabled=true
+      - --http-relative-path=/auth
+      - --hostname=${PUBLIC_URL:?set PUBLIC_URL}/auth
+      - --proxy-headers=xforwarded
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD}
+      # Placeholders used by the realm import.
+      WEBPRESENTER_PUBLIC_URL: ${PUBLIC_URL}
+      WEBPRESENTER_ADMIN_USER: ${WEBPRESENTER_ADMIN_USER:?set WEBPRESENTER_ADMIN_USER}
+      WEBPRESENTER_ADMIN_PASSWORD: ${WEBPRESENTER_ADMIN_PASSWORD:?set WEBPRESENTER_ADMIN_PASSWORD}
+      WEBPRESENTER_ADMIN_EMAIL: ${WEBPRESENTER_ADMIN_EMAIL:-admin@webpresenter.local}
+    volumes:
+      - ./prod/webpresenter-realm.json:/opt/keycloak/data/import/webpresenter-realm.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /auth/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.52
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/seaweedfs-entrypoint.sh"]
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY}
+    volumes:
+      - seaweedfs-data:/data
+      - ./prod/seaweedfs-entrypoint.sh:/seaweedfs-entrypoint.sh:ro
+    ports:
+      # S3: players and browsers download media directly (presigned URLs).
+      - "${S3_PUBLIC_PORT:-8333}:8333"
+      # Filer HTTP and gRPC: used by the replica's filer.sync.
+      - "${FILER_PORT:-8888}:8888"
+      - "${FILER_GRPC_PORT:-18888}:18888"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9333/cluster/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/server/Dockerfile
+    image: webpresenter-server:latest
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      WEBPRESENTER_DB_URL: jdbc:postgresql://postgres:5432/webpresenter
+      WEBPRESENTER_DB_USER: webpresenter
+      WEBPRESENTER_DB_PASSWORD: ${DB_PASSWORD}
+      WEBPRESENTER_OIDC_ISSUER: ${PUBLIC_URL}/auth/realms/webpresenter
+      WEBPRESENTER_OIDC_JWKS: http://keycloak:8080/auth/realms/webpresenter/protocol/openid-connect/certs
+      WEBPRESENTER_S3_ENDPOINT: http://seaweedfs:8333
+      WEBPRESENTER_S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_URL:?set S3_PUBLIC_URL}
+      WEBPRESENTER_S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      WEBPRESENTER_S3_SECRET_KEY: ${S3_SECRET_KEY}
+      WEBPRESENTER_S3_BUCKET: media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+
+  proxy:
+    image: caddy:2.11.7-alpine
+    restart: unless-stopped
+    ports:
+      - "${PUBLIC_PORT:-80}:80"
+    volumes:
+      - ./prod/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - server
+      - keycloak
+
+  # Live bidirectional replication with another SeaweedFS (e.g. the church computer).
+  replication:
+    profiles: ["replication"]
+    image: chrislusf/seaweedfs:4.52
+    restart: unless-stopped
+    command:
+      - filer.sync
+      - -a=seaweedfs:8888
+      # Required when this profile is used: host:port of the other filer.
+      - -b=${REPLICA_FILER:-unset-replica-filer:8888}
+      # Chunks travel through the filers, so only the filer ports must be reachable.
+      - -a.filerProxy
+      - -b.filerProxy
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  seaweedfs-data:
+  caddy-data:

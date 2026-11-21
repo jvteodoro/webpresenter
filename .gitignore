@@ -15,3 +15,6 @@ build/
 # Local environment
 deploy/.env
 *.log
+deploy/.env.prod
+# IDE build output (Eclipse/VS Code Java)
+bin/

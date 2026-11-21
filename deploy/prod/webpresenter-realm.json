@@ -1,0 +1,88 @@
+{
+  "realm": "webpresenter",
+  "displayName": "webpresenter",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "loginWithEmailAllowed": true,
+  "bruteForceProtected": true,
+  "internationalizationEnabled": true,
+  "supportedLocales": [
+    "pt-BR",
+    "en"
+  ],
+  "defaultLocale": "pt-BR",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 43200,
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Configuração do sistema, usuários e dispositivos"
+      },
+      {
+        "name": "av-technician",
+        "description": "Técnico de áudio e vídeo: biblioteca de mídia e dispositivos"
+      },
+      {
+        "name": "worship-leader",
+        "description": "Líder de louvor: planeja e controla os eventos ao vivo"
+      },
+      {
+        "name": "musician",
+        "description": "Músico: acompanha o evento ao vivo, letras e cifras"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "webpresenter-web",
+      "name": "webpresenter web",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "${WEBPRESENTER_PUBLIC_URL}/*"
+      ],
+      "webOrigins": [
+        "${WEBPRESENTER_PUBLIC_URL}"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${WEBPRESENTER_PUBLIC_URL}/*"
+      }
+    },
+    {
+      "clientId": "webpresenter-cli",
+      "name": "Administration scripts (imports); password grant",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "${WEBPRESENTER_ADMIN_USER}",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Administrador",
+      "lastName": "webpresenter",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${WEBPRESENTER_ADMIN_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-webpresenter",
+        "admin",
+        "av-technician",
+        "worship-leader",
+        "musician"
+      ],
+      "email": "${WEBPRESENTER_ADMIN_EMAIL:admin@webpresenter.local}"
+    }
+  ]
+}
