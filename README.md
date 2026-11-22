@@ -78,11 +78,11 @@ archives, and builds the self-contained installer. It needs internet access and 
 administrator approval if WiX needs installation. You can rerun it safely after an interrupted
 setup; already installed tools are detected and skipped. The installer is written to
 `player\build\windows-installer`; it includes its own Java runtime, so Java is not needed on the
-event computer. Install it, then launch the player with the central server's LAN address, for
-example:
+event computer. Installation is system-wide and may request administrator approval. After
+installing, launch the player with the central server's LAN address, for example:
 
 ```powershell
-& "$env:LOCALAPPDATA\Programs\WebPresenter MediaPlayer\WebPresenter MediaPlayer.exe" `
+& "C:\Program Files\WebPresenter MediaPlayer\WebPresenter MediaPlayer.exe" `
   --server-url=http://192.168.1.10:8090
 ```
 
