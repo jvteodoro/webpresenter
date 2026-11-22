@@ -55,6 +55,14 @@ val windowsInstaller by tasks.registering(Exec::class) {
             include("*.dll")
             into(appLib)
         }
+        val mainJars = appLib.get().asFile.listFiles { candidate ->
+            candidate.isFile && candidate.extension.equals("jar", ignoreCase = true) && runCatching {
+                java.util.jar.JarFile(candidate).use { it.getJarEntry("webpresenter/player/Launcher.class") != null }
+            }.getOrDefault(false)
+        }.orEmpty()
+        if (mainJars.size != 1) {
+            throw GradleException("Expected one player JAR containing Launcher.class in ${appLib.get().asFile}, found ${mainJars.map { it.name }}")
+        }
         val output = layout.buildDirectory.dir("windows-installer").get().asFile
         output.mkdirs()
         commandLine(
@@ -63,7 +71,7 @@ val windowsInstaller by tasks.registering(Exec::class) {
             "--name", "WebPresenter MediaPlayer",
             "--app-version", project.version.toString().takeUnless { it == "unspecified" }?.removeSuffix("-SNAPSHOT") ?: "1.0.0",
             "--input", appLib.get().asFile.absolutePath,
-            "--main-jar", "player-${project.version}.jar",
+            "--main-jar", mainJars.single().name,
             "--main-class", "webpresenter.player.Launcher",
             "--java-options", "--enable-native-access=ALL-UNNAMED",
             "--win-menu",
