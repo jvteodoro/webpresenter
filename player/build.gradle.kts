@@ -64,7 +64,6 @@ val windowsInstaller by tasks.registering(Exec::class) {
             "--app-version", project.version.toString().takeUnless { it == "unspecified" }?.removeSuffix("-SNAPSHOT") ?: "1.0.0",
             "--input", appLib.get().asFile.absolutePath,
             "--main-jar", "player-${project.version}.jar",
-            "--class-path", "*",
             "--main-class", "webpresenter.player.Launcher",
             "--java-options", "--enable-native-access=ALL-UNNAMED",
             "--win-menu",
