@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$ProgressPreference = 'Continue'
+$ProgressPreference = 'SilentlyContinue'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $runtimeDir = Join-Path $repoRoot 'player\build\mpv-runtime'
 $mpvApi = 'https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest'
@@ -115,15 +115,8 @@ $archiveDir = Join-Path $runtimeDir 'archives'
 New-Item -ItemType Directory -Force -Path $archiveDir | Out-Null
 $devArchive = Join-Path $archiveDir $devAsset.name
 $appArchive = Join-Path $archiveDir $appAsset.name
-$oldProgressPreference = $ProgressPreference
-try {
-    # Suppress the slow per-byte progress rendering only for these downloads, not DISM/NetFx3.
-    $ProgressPreference = 'SilentlyContinue'
-    Invoke-WebRequest -Uri $devAsset.browser_download_url -OutFile $devArchive
-    Invoke-WebRequest -Uri $appAsset.browser_download_url -OutFile $appArchive
-} finally {
-    $ProgressPreference = $oldProgressPreference
-}
+Invoke-WebRequest -Uri $devAsset.browser_download_url -OutFile $devArchive
+Invoke-WebRequest -Uri $appAsset.browser_download_url -OutFile $appArchive
 
 # The dev archive supplies libmpv-2.dll; the full mpv archive supplies its runtime DLL dependencies.
 & $sevenZip.Source x $devArchive "-o$runtimeDir" -y | Out-Null
