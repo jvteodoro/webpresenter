@@ -16,6 +16,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.springframework.boot:spring-boot-starter-amqp")
     implementation("org.springframework.modulith:spring-modulith-starter-core")
     implementation("software.amazon.awssdk:s3")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")

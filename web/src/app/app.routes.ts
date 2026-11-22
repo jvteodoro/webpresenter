@@ -85,6 +85,7 @@ export const routes: Routes = [
           hint: 'Arraste músicas instrumentais para tocar como fundo musical',
           emptyText: 'Nenhum fundo musical ainda.',
           kindFilter: false,
+          importTarget: 'BACKGROUND_MUSIC',
         },
       },
       {
@@ -97,15 +98,21 @@ export const routes: Routes = [
           hint: 'Arraste sons curtos (sinos, alertas) para cronômetros e avisos',
           emptyText: 'Nenhum efeito sonoro ainda.',
           kindFilter: false,
+          importTarget: 'SOUND_EFFECT',
         },
       },
       {
         path: 'midia',
         title: 'Mídia · webpresenter',
         loadComponent: () => import('./features/library/media-section/media-section').then((m) => m.MediaSection),
-        data: { purpose: 'GENERAL' },
+        data: { purpose: 'GENERAL', importTarget: 'MEDIA' },
       },
     ],
+  },
+  {
+    path: 'fila',
+    title: 'Fila · webpresenter',
+    loadComponent: () => import('./features/jobs/jobs-page').then((m) => m.JobsPage),
   },
   {
     path: 'dispositivos',

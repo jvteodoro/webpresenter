@@ -1,6 +1,17 @@
 @if (currentUser.canManageLibrary()) {
   <section class="card">
     <app-media-upload [purpose]="purpose()" [accept]="accept()" [hint]="hint()" (uploaded)="onUploaded($event)" />
+    @if (importTarget()) {
+      <div class="import">
+        <button mat-stroked-button type="button" (click)="openImport()"><mat-icon>download</mat-icon> Importar do YouTube</button>
+        @for (job of importing(); track job.id) {
+          <span class="importing" role="status">
+            <mat-icon>hourglass_top</mat-icon>
+            {{ job.title }} · {{ job.status === 'QUEUED' ? 'na fila' : job.progress + '%' }}
+          </span>
+        }
+      </div>
+    }
   </section>
 }
 

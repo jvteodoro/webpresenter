@@ -18,3 +18,8 @@ deploy/.env
 deploy/.env.prod
 # IDE build output (Eclipse/VS Code Java)
 bin/
+
+# Worker virtual environment
+worker/.venv/
+__pycache__/
+*.egg-info/

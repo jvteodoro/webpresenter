@@ -100,12 +100,45 @@ services:
       WEBPRESENTER_S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       WEBPRESENTER_S3_SECRET_KEY: ${S3_SECRET_KEY}
       WEBPRESENTER_S3_BUCKET: media
+      WEBPRESENTER_RABBITMQ_HOST: rabbitmq
+      WEBPRESENTER_RABBITMQ_USER: webpresenter
+      WEBPRESENTER_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
       keycloak:
         condition: service_healthy
       seaweedfs:
+        condition: service_healthy
+
+  rabbitmq:
+    # Job queue between the server and the workers. Internal only (no published ports).
+    image: rabbitmq:4.1.4-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: webpresenter
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  worker:
+    # YouTube import and Demucs vocal separation (CPU). Reaches S3 through presigned links at the
+    # server's internal address (http://seaweedfs:8333). Scale with --scale worker=2.
+    build:
+      context: ../worker
+    image: webpresenter-worker:latest
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: amqp://webpresenter:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2F
+    volumes:
+      - worker-models:/models
+    depends_on:
+      rabbitmq:
         condition: service_healthy
 
   proxy:
@@ -149,3 +182,5 @@ volumes:
   postgres-data:
   seaweedfs-data:
   caddy-data:
+  rabbitmq-data:
+  worker-models:

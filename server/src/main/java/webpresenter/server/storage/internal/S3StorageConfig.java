@@ -37,6 +37,11 @@ class S3StorageConfig {
         return presigner(props, props.playerEndpoint());
     }
 
+    @Bean(destroyMethod = "close")
+    S3Presigner s3WorkerPresigner(StorageProperties props) {
+        return presigner(props, props.workerEndpoint());
+    }
+
     private static S3Presigner presigner(StorageProperties props, java.net.URI endpoint) {
         return S3Presigner.builder()
                 .endpointOverride(endpoint)

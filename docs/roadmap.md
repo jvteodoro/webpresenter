@@ -68,6 +68,14 @@ Later job types (see `songs.md`): transcription, lyrics alignment, segmentation.
 Demucs runs on CPU by default (several minutes per song); a GPU, when present, is used
 automatically. Workers run as their own container in the production stack.
 
+As implemented (phase B): module `jobs` (table `job`, REST under `/api/jobs`, SSE stream
+`/api/jobs/stream`), message protocol in `worker/README.md`. The server stays healthy without
+RabbitMQ (jobs then fail at once with a clear message and can be retried). Results are uploaded by
+the worker to a staging key through a presigned PUT and registered by the server through the
+library (`MediaImporter`) and songs (`SongPipeline`). The web app has the queue page (`/fila`,
+badge with active jobs), "Importar do YouTube" in the library sections and the queue, and
+"Gerar playback sem voz" on song recordings with vocals.
+
 ## 3. Background music and mixer
 
 ### Resolution
@@ -127,7 +135,7 @@ also used by the timer (scene end time) and the operation view.
 
 ## Phases
 
-Status: phase A implemented; B–E to do.
+Status: phase A implemented; phase B implemented and tested with a simulated worker (real yt-dlp/Demucs run pending); C–E to do.
 
 | Phase | Content |
 |---|---|

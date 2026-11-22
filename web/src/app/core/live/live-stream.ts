@@ -2,6 +2,7 @@ import { Injectable, OnDestroy, inject, signal } from '@angular/core';
 import Keycloak from 'keycloak-js';
 import { environment } from '../../../environments/environment';
 import { LiveState } from './live';
+import { readSse } from '../sse';
 
 export type StreamStatus = 'connecting' | 'open' | 'reconnecting';
 
@@ -69,7 +70,7 @@ export class LiveStream implements OnDestroy {
       }
       this.statusSignal.set('open');
       this.retryMs = 1000;
-      await this.read(response.body, signal);
+      await readSse(response.body, signal, (e) => this.apply(JSON.parse(e.data) as LiveState));
     } catch {
       // network error, server restart or abort: handled below
     }
@@ -77,33 +78,6 @@ export class LiveStream implements OnDestroy {
       this.statusSignal.set('reconnecting');
       this.retryTimer = setTimeout(() => void this.connect(), this.retryMs);
       this.retryMs = Math.min(this.retryMs * 2, 5000);
-    }
-  }
-
-  /** Minimal SSE parser: events separated by blank lines, "data:" lines joined. */
-  private async read(body: ReadableStream<Uint8Array>, signal: AbortSignal): Promise<void> {
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    while (!signal.aborted) {
-      const { value, done } = await reader.read();
-      if (done) {
-        return;
-      }
-      buffer += decoder.decode(value, { stream: true });
-      let boundary: number;
-      while ((boundary = buffer.search(/\r?\n\r?\n/)) >= 0) {
-        const block = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary).replace(/^\r?\n\r?\n/, '');
-        const data = block
-          .split(/\r?\n/)
-          .filter((line) => line.startsWith('data:'))
-          .map((line) => line.slice(5).replace(/^ /, ''))
-          .join('\n');
-        if (data) {
-          this.apply(JSON.parse(data) as LiveState);
-        }
-      }
     }
   }
 

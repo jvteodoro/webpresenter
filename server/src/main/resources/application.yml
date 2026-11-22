@@ -26,6 +26,15 @@ spring:
       ddl-auto: validate
   flyway:
     locations: classpath:db/migration
+  rabbitmq:
+    host: ${WEBPRESENTER_RABBITMQ_HOST:localhost}
+    port: ${WEBPRESENTER_RABBITMQ_PORT:5672}
+    username: ${WEBPRESENTER_RABBITMQ_USER:webpresenter}
+    password: ${WEBPRESENTER_RABBITMQ_PASSWORD:webpresenter}
+    listener:
+      simple:
+        # Keep retrying in the background when RabbitMQ is down; the rest of the server works without it.
+        missing-queues-fatal: false
   security:
     oauth2:
       resourceserver:
@@ -37,6 +46,7 @@ webpresenter:
     endpoint: ${WEBPRESENTER_S3_ENDPOINT:http://localhost:8333}
     public-endpoint: ${WEBPRESENTER_S3_PUBLIC_ENDPOINT:http://localhost:8333}
     player-endpoint: ${WEBPRESENTER_S3_PLAYER_ENDPOINT:}
+    worker-endpoint: ${WEBPRESENTER_S3_WORKER_ENDPOINT:}
     region: us-east-1
     access-key: ${WEBPRESENTER_S3_ACCESS_KEY:webpresenter}
     secret-key: ${WEBPRESENTER_S3_SECRET_KEY:webpresenter-dev-secret}
@@ -48,6 +58,10 @@ webpresenter:
     allowed-origins: ${WEBPRESENTER_CORS_ORIGINS:http://localhost:4200}
 
 management:
+  health:
+    # The processing queue is optional for the panel and the players; it must not mark the server down.
+    rabbit:
+      enabled: false
   endpoints:
     web:
       exposure:

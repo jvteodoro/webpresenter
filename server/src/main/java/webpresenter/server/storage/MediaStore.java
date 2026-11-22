@@ -18,6 +18,15 @@ public interface MediaStore {
      */
     PresignedUrl presignedPlayerDownload(String key, Duration validity);
 
+    /** Download link for processing workers (they reach the store at the server's address by default). */
+    PresignedUrl presignedWorkerDownload(String key, Duration validity);
+
+    /** Upload link (HTTP PUT) for processing workers to store a result under the given key. */
+    PresignedUrl presignedWorkerUpload(String key, Duration validity);
+
+    /** Copies an object into a local file. */
+    void download(String key, Path target);
+
     /** Removes the object; removing a missing key is not an error. */
     void delete(String key);
 }

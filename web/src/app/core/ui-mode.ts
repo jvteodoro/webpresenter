@@ -39,6 +39,7 @@ export class UiModeService {
       { path: '/eventos', label: 'Eventos', icon: 'event_list' },
       { path: '/musicas', label: 'Músicas', icon: 'queue_music' },
       { path: '/biblioteca', label: 'Biblioteca', icon: 'video_library' },
+      { path: '/fila', label: 'Fila', icon: 'pending_actions' },
     ];
     if (this.currentUser.canManageDevices()) {
       entries.push({ path: '/dispositivos', label: 'Dispositivos', icon: 'connected_tv' });

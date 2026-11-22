@@ -17,7 +17,7 @@ import webpresenter.server.library.MediaKind;
 import webpresenter.server.library.MediaUsage;
 
 @Service
-class SongService implements MediaUsage, SongCatalog {
+class SongService implements MediaUsage, SongCatalog, SongPipeline {
 
     private final SongRepository songs;
     private final SongCollectionRepository collections;
@@ -110,6 +110,44 @@ class SongService implements MediaUsage, SongCatalog {
         }
         song.touch(clock.instant());
         return load(song);
+    }
+
+    @Override
+    @Transactional
+    public UUID addGeneratedPlayback(UUID songId, UUID sourceRecordingId, UUID mediaId) {
+        Song song = findSong(songId);
+        Recording source = song.recording(sourceRecordingId);
+        requireMedia(mediaId, MediaKind.AUDIO, MediaKind.VIDEO);
+        Recording recording = song.addRecording(RecordingKind.PLAYBACK, mediaId, Source.PIPELINE);
+        if (source.timingJson() != null) {
+            Timing timing = json.readValue(source.timingJson(), Timing.class);
+            // Kept as-is (same lyrics version): the separated track has exactly the same timeline.
+            recording.setTiming(json.writeValueAsString(
+                    new Timing(timing.lyricsVersion(), Source.PIPELINE, false, timing.cues())));
+        }
+        song.touch(clock.instant());
+        songs.flush();
+        return recording.id();
+    }
+
+    @Override
+    @Transactional
+    public UUID createFromRecording(String title, UUID mediaId) {
+        requireMedia(mediaId, MediaKind.AUDIO, MediaKind.VIDEO);
+        Lyrics placeholder = new Lyrics(List.of(new Lyrics.Part("i", Lyrics.PartKind.INSTRUMENTAL, "Instrumental",
+                List.of(new Lyrics.Slide(List.of(), null)))), List.of("i"));
+        Song song = create(new SongInput(title, null, null, null, null, null, SongStatus.DRAFT, placeholder, List.of()),
+                Source.PIPELINE);
+        song.addRecording(RecordingKind.SUNG, mediaId, Source.PIPELINE);
+        songs.flush();
+        return song.id();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<UUID> recordingMedia(UUID songId, UUID recordingId) {
+        return songs.findById(songId).flatMap(song -> song.recordings().stream()
+                .filter(r -> r.id().equals(recordingId)).findFirst().map(Recording::mediaId));
     }
 
     @Transactional

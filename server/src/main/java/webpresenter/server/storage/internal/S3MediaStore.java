@@ -24,11 +24,14 @@ class S3MediaStore implements MediaStore, ApplicationRunner {
     private final S3Client s3;
     private final S3Presigner presigner;
     private final S3Presigner playerPresigner;
+    private final S3Presigner workerPresigner;
     private final String bucket;
 
     S3MediaStore(S3Client s3, @org.springframework.beans.factory.annotation.Qualifier("s3Presigner") S3Presigner presigner,
             @org.springframework.beans.factory.annotation.Qualifier("s3PlayerPresigner") S3Presigner playerPresigner,
+            @org.springframework.beans.factory.annotation.Qualifier("s3WorkerPresigner") S3Presigner workerPresigner,
             StorageProperties props) {
+        this.workerPresigner = workerPresigner;
         this.s3 = s3;
         this.presigner = presigner;
         this.playerPresigner = playerPresigner;
@@ -59,6 +62,29 @@ class S3MediaStore implements MediaStore, ApplicationRunner {
     @Override
     public PresignedUrl presignedPlayerDownload(String key, Duration validity) {
         return presign(playerPresigner, key, validity);
+    }
+
+    @Override
+    public PresignedUrl presignedWorkerDownload(String key, Duration validity) {
+        return presign(workerPresigner, key, validity);
+    }
+
+    @Override
+    public PresignedUrl presignedWorkerUpload(String key, Duration validity) {
+        var request = workerPresigner.presignPutObject(p -> p
+                .signatureDuration(validity)
+                .putObjectRequest(o -> o.bucket(bucket).key(key)));
+        return new PresignedUrl(URI.create(request.url().toString()), Instant.now().plus(validity));
+    }
+
+    @Override
+    public void download(String key, Path target) {
+        try {
+            java.nio.file.Files.deleteIfExists(target);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+        s3.getObject(b -> b.bucket(bucket).key(key), target);
     }
 
     private PresignedUrl presign(S3Presigner signer, String key, Duration validity) {

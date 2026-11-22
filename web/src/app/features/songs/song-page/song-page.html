@@ -43,6 +43,27 @@
           }
         </p>
       }
+      @if (playbackJob(); as job) {
+        @if (generating()) {
+          <div class="generation" role="status">
+            <span>
+              @if (job.status === 'QUEUED') { Playback sem voz na fila… }
+              @else { {{ job.message || 'Gerando playback sem voz' }} · {{ job.progress }}% }
+            </span>
+            <mat-progress-bar [mode]="job.status === 'QUEUED' ? 'query' : 'determinate'" [value]="job.progress" />
+            <a routerLink="/fila">Ver fila</a>
+          </div>
+        } @else if (job.status === 'FAILED') {
+          <p class="generation-failed" role="alert"><mat-icon>error</mat-icon> A geração do playback falhou: {{ job.message }}. <a routerLink="/fila">Ver fila</a></p>
+        }
+      }
+      @if (recording(); as r) {
+        @if (r.kind !== 'PLAYBACK' && currentUser.canEditSongs() && !generating()) {
+          <button mat-stroked-button class="generate" (click)="generatePlayback(r)">
+            <mat-icon>graphic_eq</mat-icon> Gerar playback sem voz
+          </button>
+        }
+      }
     </section>
   }
 

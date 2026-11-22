@@ -3,7 +3,11 @@
   <nav class="nav">
     @for (entry of uiMode.nav(); track entry.path) {
       <a mat-button [routerLink]="entry.path" routerLinkActive="active" [attr.aria-label]="entry.label">
-        <mat-icon>{{ entry.icon }}</mat-icon>
+        @if (entry.path === '/fila' && jobs.activeCount() > 0) {
+          <mat-icon [matBadge]="jobs.activeCount()" matBadgeSize="small" [attr.aria-hidden]="true">{{ entry.icon }}</mat-icon>
+        } @else {
+          <mat-icon>{{ entry.icon }}</mat-icon>
+        }
         <span class="nav-label">{{ entry.label }}</span>
       </a>
     }

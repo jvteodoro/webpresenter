@@ -11,6 +11,10 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { filter, switchMap } from 'rxjs';
 import { CurrentUser } from '../../../core/auth/current-user';
 import { MediaAsset, MediaKind, MediaPurpose } from '../../../core/media/media';
+import { ImportTarget, Job, isActive } from '../../../core/jobs/job';
+import { JobsStream } from '../../../core/jobs/jobs-stream';
+import { ImportDialog, ImportDialogData } from '../../jobs/import-dialog';
+import { MatButtonModule } from '@angular/material/button';
 import { MediaApi } from '../../../core/media/media-api';
 import { normalizeText } from '../../../shared/text';
 import { ConfirmDialog, ConfirmDialogData } from '../../../shared/dialogs/confirm-dialog';
@@ -27,6 +31,7 @@ const DEFAULT_EMPTY = 'Nenhuma mídia na biblioteca ainda.';
   selector: 'app-media-section',
   imports: [
     FormsModule,
+    MatButtonModule,
     MatButtonToggleModule,
     MatFormFieldModule,
     MatIconModule,
@@ -48,6 +53,16 @@ export class MediaSection {
   readonly emptyText = input(DEFAULT_EMPTY, { transform: (v: string | undefined) => v ?? DEFAULT_EMPTY });
   /** Route data: show the video/audio/image filter. */
   readonly kindFilter = input(true, { transform: (v: boolean | undefined) => v ?? true });
+  /** Route data: destination of "Importar do YouTube" in this section (none: no button). */
+  readonly importTarget = input<ImportTarget | undefined>(undefined);
+
+  private readonly jobs = inject(JobsStream);
+  /** Downloads into this section seen in progress; the list reloads when one finishes. */
+  private readonly followed = new Set<string>();
+  private readonly sectionImports = computed(() =>
+    this.jobs.jobs().filter((j) => j.type === 'YOUTUBE_IMPORT' && j.params['target'] === this.importTarget()),
+  );
+  protected readonly importing = computed(() => this.sectionImports().filter(isActive));
 
   private readonly api = inject(MediaApi);
   private readonly dialog = inject(MatDialog);
@@ -72,6 +87,19 @@ export class MediaSection {
 
   constructor() {
     effect(() => {
+      let finished = false;
+      for (const job of this.sectionImports()) {
+        if (isActive(job)) {
+          this.followed.add(job.id);
+        } else if (this.followed.delete(job.id) && job.status === 'DONE') {
+          finished = true;
+        }
+      }
+      if (finished) {
+        untracked(() => this.reload());
+      }
+    });
+    effect(() => {
       this.purpose();
       untracked(() => this.reload());
     });
@@ -90,6 +118,18 @@ export class MediaSection {
         this.loading.set(false);
       },
     });
+  }
+
+  protected openImport(): void {
+    this.dialog
+      .open<ImportDialog, ImportDialogData, Job>(ImportDialog, { data: { target: this.importTarget() } })
+      .afterClosed()
+      .subscribe((job) => {
+        if (job) {
+          this.jobs.apply(job);
+          this.notify('Download na fila. A mídia aparece aqui quando terminar.');
+        }
+      });
   }
 
   protected onUploaded(asset: MediaAsset): void {

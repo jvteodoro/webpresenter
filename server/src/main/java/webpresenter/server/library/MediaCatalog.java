@@ -14,4 +14,7 @@ public interface MediaCatalog {
 
     /** Download link for MediaPlayers (their address for the media store may differ from browsers'). */
     PresignedUrl playerDownloadUrl(UUID id);
+
+    /** Download link for processing workers. */
+    PresignedUrl workerDownloadUrl(UUID id);
 }

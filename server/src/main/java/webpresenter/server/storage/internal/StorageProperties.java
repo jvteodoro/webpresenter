@@ -10,13 +10,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param publicEndpoint URL put into presigned links, as reachable by browsers and players
  *     (defaults to {@code endpoint}; differs when the server reaches S3 through a Docker network)
  * @param playerEndpoint URL put into links for MediaPlayers (defaults to {@code publicEndpoint})
+ * @param workerEndpoint URL put into links for processing workers (defaults to {@code endpoint}:
+ *     workers usually run next to the server)
  * @param region signing region (any value for SeaweedFS)
  * @param bucket bucket holding all media; created on startup if missing
  */
 @ConfigurationProperties("webpresenter.storage")
 record StorageProperties(
-        URI endpoint, URI publicEndpoint, URI playerEndpoint, String region, String accessKey, String secretKey,
-        String bucket) {
+        URI endpoint, URI publicEndpoint, URI playerEndpoint, URI workerEndpoint, String region, String accessKey,
+        String secretKey, String bucket) {
 
     StorageProperties {
         if (publicEndpoint == null || publicEndpoint.toString().isBlank()) {
@@ -24,6 +26,9 @@ record StorageProperties(
         }
         if (playerEndpoint == null || playerEndpoint.toString().isBlank()) {
             playerEndpoint = publicEndpoint;
+        }
+        if (workerEndpoint == null || workerEndpoint.toString().isBlank()) {
+            workerEndpoint = endpoint;
         }
         if (region == null || region.isBlank()) {
             region = "us-east-1";

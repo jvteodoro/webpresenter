@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -11,6 +11,9 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { filter, switchMap } from 'rxjs';
 import { CurrentUser } from '../../../core/auth/current-user';
+import { Job, isActive } from '../../../core/jobs/job';
+import { JobsApi } from '../../../core/jobs/jobs-api';
+import { JobsStream } from '../../../core/jobs/jobs-stream';
 import { Lyrics, RECORDING_LABELS, Recording, SongDetail, inputOf } from '../../../core/songs/song';
 import { SongsApi } from '../../../core/songs/songs-api';
 import { DurationPipe } from '../../../shared/pipes/duration.pipe';
@@ -43,6 +46,20 @@ export class SongPage {
   private readonly destroyRef = inject(DestroyRef);
   protected readonly currentUser = inject(CurrentUser);
   protected readonly recordingLabels = RECORDING_LABELS;
+  private readonly jobsApi = inject(JobsApi);
+  private readonly jobs = inject(JobsStream);
+
+  /** The latest playback generation of this song (queued, running or just finished), if any. */
+  protected readonly playbackJob = computed<Job | null>(
+    () =>
+      this.jobs.jobs().find((j) => j.type === 'SEPARATE_PLAYBACK' && j.params['songId'] === this.id()) ?? null,
+  );
+  protected readonly generating = computed(() => {
+    const job = this.playbackJob();
+    return job !== null && isActive(job);
+  });
+  /** Generations seen in progress on this page; when one of them is done the song is reloaded. */
+  private readonly followed = new Set<string>();
 
   private readonly audio = viewChild<ElementRef<HTMLAudioElement>>('audio');
 
@@ -72,6 +89,20 @@ export class SongPage {
   });
 
   constructor() {
+    this.jobs.attach();
+    this.destroyRef.onDestroy(() => this.jobs.detach());
+    // When a playback generation finishes, the new recording appears.
+    effect(() => {
+      const job = this.playbackJob();
+      if (!job) {
+        return;
+      }
+      if (isActive(job)) {
+        this.followed.add(job.id);
+      } else if (this.followed.delete(job.id) && job.status === 'DONE') {
+        untracked(() => this.load(this.id()));
+      }
+    });
     effect(() => this.load(this.id()));
     // Keep the highlighted slide in view while the recording plays.
     effect(() => {
@@ -133,6 +164,17 @@ export class SongPage {
         error: (e: HttpErrorResponse) =>
           this.snackBar.open(e.error?.detail ?? `Não foi possível salvar (${e.status}).`, 'OK', { duration: 5000 }),
       });
+  }
+
+  protected generatePlayback(recording: Recording): void {
+    this.jobsApi.separatePlayback(this.id(), recording.id).subscribe({
+      next: (job) => {
+        this.jobs.apply(job);
+        this.snackBar.open('Geração do playback na fila. Isso pode levar alguns minutos.', 'OK', { duration: 5000 });
+      },
+      error: (e: HttpErrorResponse) =>
+        this.snackBar.open(e.error?.detail ?? `Não foi possível gerar (${e.status}).`, 'OK', { duration: 5000 }),
+    });
   }
 
   private load(id: string): void {

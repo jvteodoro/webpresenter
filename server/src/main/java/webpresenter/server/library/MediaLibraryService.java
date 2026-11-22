@@ -29,7 +29,7 @@ import webpresenter.server.storage.PresignedUrl;
 
 @Service
 @EnableConfigurationProperties(LibraryProperties.class)
-class MediaLibraryService implements MediaCatalog {
+class MediaLibraryService implements MediaCatalog, MediaImporter {
 
     private static final Logger log = LoggerFactory.getLogger(MediaLibraryService.class);
 
@@ -53,10 +53,6 @@ class MediaLibraryService implements MediaCatalog {
         this.clock = Clock.systemUTC();
     }
 
-    /**
-     * Adds a file to the library: copies it to a temporary file while hashing it, inspects it
-     * with ffprobe, stores it, and records its metadata.
-     */
     /** Result of an upload: the asset, and whether it was created or already existed (same content). */
     record Uploaded(MediaAsset asset, boolean created) {}
 
@@ -155,6 +151,22 @@ class MediaLibraryService implements MediaCatalog {
     @Override
     public PresignedUrl playerDownloadUrl(UUID id) {
         return store.presignedPlayerDownload(get(id).storageKey(), properties.downloadUrlValidity());
+    }
+
+    @Override
+    public PresignedUrl workerDownloadUrl(UUID id) {
+        return store.presignedWorkerDownload(get(id).storageKey(), properties.downloadUrlValidity());
+    }
+
+    @Override
+    @Transactional
+    public MediaFile importFile(Path file, String filename, String title, MediaPurpose purpose, String createdBy) {
+        try (InputStream in = Files.newInputStream(file)) {
+            MediaAsset a = upload(in, filename, null, title, createdBy, purpose, false).asset();
+            return new MediaFile(a.id(), a.title(), a.kind(), a.contentType(), a.sizeBytes(), a.sha256(), a.durationMs());
+        } catch (IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     @Override
