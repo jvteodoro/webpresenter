@@ -15,5 +15,10 @@ public enum ItemType {
     /** A full-screen clock (local time of the player). */
     CLOCK,
     /** A countdown to a target (scene end, a time, or a duration), with sound signals. */
-    TIMER
+    TIMER,
+    /**
+     * Not presented: a variable slot of a liturgy template ("Hino escola sabatina 1"), to be
+     * replaced by the item chosen for this event.
+     */
+    SLOT
 }

@@ -80,7 +80,18 @@ class EventItem {
     @Column(name = "timer_signals")
     private String timerSignals;
 
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "slot_kind")
+    private ItemSpec.SlotKind slotKind;
+
     protected EventItem() {}
+
+    static EventItem slot(PlannedEvent event, String label, ItemSpec.SlotKind kind) {
+        EventItem item = new EventItem(event, ItemType.SLOT);
+        item.label = label;
+        item.slotKind = kind;
+        return item;
+    }
 
     static EventItem clock(PlannedEvent event, String label) {
         EventItem item = new EventItem(event, ItemType.CLOCK);
@@ -196,4 +207,5 @@ class EventItem {
     java.time.LocalTime timerTime() { return timerTime; }
     Integer timerDurationSeconds() { return timerDurationSeconds; }
     String timerSignals() { return timerSignals; }
+    ItemSpec.SlotKind slotKind() { return slotKind; }
 }

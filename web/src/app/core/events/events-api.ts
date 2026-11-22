@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { ItemSpec } from '../liturgy/liturgy';
 import { EventDetail, EventInput, EventSummary, Readiness, SlideInput, SceneInput, BackgroundSource, TimerSettings } from './event';
 
 @Injectable({ providedIn: 'root' })
@@ -39,6 +40,11 @@ export class EventsApi {
 
   addSong(id: string, songId: string, recordingId: string | null): Observable<EventDetail> {
     return this.http.post<EventDetail>(`${this.baseUrl}/${id}/items`, { type: 'SONG', songId, recordingId });
+  }
+
+  /** Fills a variable slot with what was chosen for this event. */
+  fillSlot(id: string, itemId: string, spec: ItemSpec): Observable<EventDetail> {
+    return this.http.put<EventDetail>(`${this.baseUrl}/${id}/items/${itemId}/fill`, spec);
   }
 
   addClock(id: string, label: string | null): Observable<EventDetail> {

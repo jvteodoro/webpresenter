@@ -180,6 +180,9 @@ class PlanningService implements PlannedEvents, MediaUsage {
                 scene = i;
                 continue;
             }
+            if (i.type() == ItemType.SLOT) {
+                continue; // a slot not filled yet: nothing to present
+            }
             var background = i.background() != null ? i.background()
                     : scene != null && scene.background() != null ? scene.background() : e.background();
             EventPlan.Timer timer = null;
@@ -197,6 +200,73 @@ class PlanningService implements PlannedEvents, MediaUsage {
                     background, i.label(), timer));
         }
         return new EventPlan(e.id(), e.title(), items, e.background());
+    }
+
+    /** Builds (and validates) an item from its description, as adding it by hand would. */
+    EventItem build(PlannedEvent event, ItemSpec spec) {
+        if (spec == null || spec.type() == null) {
+            throw new InvalidRequestException("item type is required");
+        }
+        EventItem item = switch (spec.type()) {
+            case MEDIA -> {
+                if (spec.mediaId() == null || catalog.find(spec.mediaId()).isEmpty()) {
+                    throw new InvalidRequestException("media " + spec.mediaId() + " does not exist");
+                }
+                yield EventItem.media(event, spec.mediaId());
+            }
+            case SLIDE -> {
+                if (spec.slideTitle() == null || spec.slideTitle().isBlank()) {
+                    throw new InvalidRequestException("slideTitle is required for text slides");
+                }
+                yield EventItem.slide(event, spec.slideTitle().strip(), spec.slideBody() == null ? "" : spec.slideBody().strip());
+            }
+            case SONG -> {
+                if (spec.songId() == null) {
+                    throw new InvalidRequestException("songId is required for songs");
+                }
+                requireRecording(spec.songId(), spec.recordingId());
+                yield EventItem.song(event, spec.songId(), spec.recordingId());
+            }
+            case SCENE -> {
+                if (spec.sceneTitle() == null || spec.sceneTitle().isBlank()) {
+                    throw new InvalidRequestException("sceneTitle is required for scenes");
+                }
+                yield EventItem.scene(event, spec.sceneTitle().strip(), spec.sceneStarts(), spec.sceneEnds());
+            }
+            case CLOCK -> EventItem.clock(event, blank(spec.label()));
+            case TIMER -> EventItem.timer(event, blank(spec.label()), spec.timer(), signalsJson(spec.timer()));
+            case SLOT -> {
+                if (spec.label() == null || spec.label().isBlank() || spec.slotKind() == null) {
+                    throw new InvalidRequestException("a variable slot needs a name and the kind of item");
+                }
+                yield EventItem.slot(event, spec.label().strip(), spec.slotKind());
+            }
+        };
+        if (spec.background() != null) {
+            validate(spec.background());
+            item.setBackground(spec.background());
+        }
+        return item;
+    }
+
+    /** Replaces a variable slot with the item chosen for this event (it must be of the expected kind). */
+    @Transactional
+    PlannedEvent fillSlot(UUID id, UUID itemId, ItemSpec spec) {
+        PlannedEvent event = find(id);
+        EventItem slot = event.item(itemId);
+        if (slot.type() != ItemType.SLOT) {
+            throw new InvalidRequestException("only variable slots can be filled");
+        }
+        if (spec == null || spec.type() == null || !spec.fits(slot.slotKind())) {
+            throw new InvalidRequestException("this slot expects " + slot.slotKind());
+        }
+        EventItem item = build(event, spec);
+        if (spec.background() == null && slot.background() != null) {
+            item.setBackground(slot.background()); // the slot's background music stays with what fills it
+        }
+        event.replaceItem(itemId, item, clock.instant());
+        changed(event);
+        return loaded(event);
     }
 
     @Transactional

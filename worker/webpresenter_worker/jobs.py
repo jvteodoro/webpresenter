@@ -156,7 +156,8 @@ def separate_playback(job: JobRequest, workdir: Path, report: Reporter) -> Resul
     download(job.input_url, source, report, 1, 8, "Baixando a gravação")
 
     model = os.environ.get("DEMUCS_MODEL", "htdemucs")
-    command = [sys.executable, "-m", "demucs", "--two-stems", "vocals", "-n", model, "-o", str(workdir / "out"), str(source)]
+    command = [sys.executable, "-m", "webpresenter_worker.demucs_runner", "--two-stems", "vocals", "-n", model,
+               "-o", str(workdir / "out"), str(source)]
     device = os.environ.get("DEMUCS_DEVICE")  # cpu or cuda; default: cuda when available
     if device:
         command += ["-d", device]
@@ -186,8 +187,7 @@ def separate_playback(job: JobRequest, workdir: Path, report: Reporter) -> Resul
     code = process.wait()
     report.check()
     if code != 0:
-        detail = next((l for l in reversed(tail) if "Error" in l or "error" in l), tail[-1] if tail else "")
-        raise JobFailed(f"O Demucs falhou: {detail[:300]}")
+        raise JobFailed(f"O Demucs falhou: {_failure(code, tail)}")
 
     stems = list((workdir / "out").glob("*/*/no_vocals.*"))
     if not stems:
@@ -199,6 +199,18 @@ def separate_playback(job: JobRequest, workdir: Path, report: Reporter) -> Resul
     if encode.returncode != 0:
         raise JobFailed(f"Não foi possível codificar o playback: {encode.stderr.strip()[:300]}")
     return Result(target, "playback.m4a")
+
+
+def _failure(code: int, tail: list[str]) -> str:
+    """The most useful line of a failed run (not a progress bar), or how the process ended."""
+    lines = [l for l in tail if not TQDM_PERCENT.search(l)]
+    detail = next((l for l in reversed(lines) if "Error" in l or "error" in l or "Exception" in l), None)
+    if detail:
+        return detail[:300]
+    if code < 0 or code > 128:
+        signal_number = -code if code < 0 else code - 128
+        return f"o processo foi encerrado pelo sistema (sinal {signal_number})"
+    return (lines[-1] if lines else f"código de saída {code}")[:300]
 
 
 def _kill_on_cancel(process: subprocess.Popen, cancelled: threading.Event) -> None:

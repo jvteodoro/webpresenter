@@ -37,6 +37,8 @@ export class UiModeService {
     }
     const entries: NavEntry[] = [
       { path: '/eventos', label: 'Eventos', icon: 'event_list' },
+      { path: '/calendario', label: 'Calendário', icon: 'calendar_month' },
+      { path: '/liturgia', label: 'Liturgia', icon: 'event_repeat' },
       { path: '/musicas', label: 'Músicas', icon: 'queue_music' },
       { path: '/biblioteca', label: 'Biblioteca', icon: 'video_library' },
       { path: '/fila', label: 'Fila', icon: 'pending_actions' },

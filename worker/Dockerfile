@@ -1,7 +1,7 @@
 # Processing worker (YouTube import with yt-dlp, vocal separation with Demucs on CPU).
-FROM python:3.12.12-slim-bookworm
+FROM python:3.12.12-slim-trixie
 
-# ffmpeg: conversions and Demucs input; Node.js: JavaScript runtime yt-dlp needs for YouTube.
+# ffmpeg: conversions and Demucs input; Node.js (20+, from trixie): JavaScript runtime yt-dlp needs for YouTube.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg nodejs ca-certificates \
     && rm -rf /var/lib/apt/lists/*

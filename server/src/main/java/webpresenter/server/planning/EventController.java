@@ -108,6 +108,8 @@ class EventController {
                         request.position());
             }
             case CLOCK -> planning.addClock(id, request.label(), request.position());
+            case SLOT -> throw new PlanningService.InvalidRequestException(
+                    "variable slots come from liturgy templates");
             case TIMER -> {
                 if (request.timer() == null) {
                     throw new PlanningService.InvalidRequestException("timer settings are required for timers");
@@ -115,6 +117,13 @@ class EventController {
                 yield planning.addTimer(id, request.label(), request.timer(), request.position());
             }
         });
+    }
+
+    /** Fills a variable slot with the item chosen for this event (a song, media or slide, as the slot expects). */
+    @PutMapping("/{id}/items/{itemId}/fill")
+    @PreAuthorize(CAN_EDIT)
+    EventDetail fillSlot(@PathVariable UUID id, @PathVariable UUID itemId, @RequestBody ItemSpec spec) {
+        return detail(planning.fillSlot(id, itemId, spec));
     }
 
     /** Label of a clock or timer and, for timers, their settings. */
@@ -197,6 +206,8 @@ class EventController {
                     new SceneView(i.sceneTitle(), i.sceneStarts(), i.sceneEnds()), background(i.background()), null, null);
             case CLOCK -> new ItemView(i.id(), i.type(), i.label() == null ? "Relógio" : i.label(), null, null, null, null,
                     background(i.background()), i.label(), null);
+            case SLOT -> new ItemView(i.id(), i.type(), i.label(), null, null, null, null, background(i.background()),
+                    i.label(), null, i.slotKind());
             case TIMER -> new ItemView(i.id(), i.type(), i.label() == null ? "Cronômetro" : i.label(), null, null, null,
                     null, background(i.background()), i.label(), new TimerView(i.timerMode(), i.timerTime(),
                             i.timerDurationSeconds(), planning.signals(i.timerSignals()).stream()
@@ -219,7 +230,8 @@ class EventController {
             }
         }).toList();
         return new EventDetail(event.id(), event.title(), event.startsAt(), event.current(), items,
-                event.createdBy(), event.updatedAt(), background(event.background()));
+                event.createdBy(), event.updatedAt(), background(event.background()), event.templateId(),
+                event.templateDate(), event.pendingSlots());
     }
 
     private BackgroundView background(webpresenter.server.playlists.BackgroundSource source) {
@@ -257,19 +269,33 @@ class EventController {
 
     record OrderRequest(@NotEmpty List<UUID> itemIds) {}
 
-    record EventSummary(UUID id, String title, Instant startsAt, boolean current, int itemCount, Instant updatedAt) {
+    /**
+     * @param templateId the liturgy template it was made from, with {@code templateDate}
+     * @param pendingSlots variable slots still to be filled
+     */
+    record EventSummary(UUID id, String title, Instant startsAt, boolean current, int itemCount, Instant updatedAt,
+            UUID templateId, java.time.LocalDate templateDate, long pendingSlots) {
         static EventSummary of(PlannedEvent e) {
-            return new EventSummary(e.id(), e.title(), e.startsAt(), e.current(), e.items().size(), e.updatedAt());
+            return new EventSummary(e.id(), e.title(), e.startsAt(), e.current(), e.items().size(), e.updatedAt(),
+                    e.templateId(), e.templateDate(), e.pendingSlots());
         }
     }
 
     /** @param background the event's own background music, or null (platform default) */
     record EventDetail(UUID id, String title, Instant startsAt, boolean current, List<ItemView> items,
-            String createdBy, Instant updatedAt, BackgroundView background) {}
+            String createdBy, Instant updatedAt, BackgroundView background, UUID templateId,
+            java.time.LocalDate templateDate, long pendingSlots) {}
 
     /** @param background the item's (or scene's) own background music, or null (inherited) */
+    /** @param slotKind for a variable slot not filled yet: what it expects */
     record ItemView(UUID id, ItemType type, String title, MediaView media, SlideView slide, SongView song,
-            SceneView scene, BackgroundView background, String label, TimerView timer) {}
+            SceneView scene, BackgroundView background, String label, TimerView timer, ItemSpec.SlotKind slotKind) {
+
+        ItemView(UUID id, ItemType type, String title, MediaView media, SlideView slide, SongView song,
+                SceneView scene, BackgroundView background, String label, TimerView timer) {
+            this(id, type, title, media, slide, song, scene, background, label, timer, null);
+        }
+    }
 
     /** A song item: chosen recording (null: lyrics only) and the recordings available. */
     record SongView(UUID id, String title, int slideCount, UUID recordingId, String recordingKind, boolean timed,

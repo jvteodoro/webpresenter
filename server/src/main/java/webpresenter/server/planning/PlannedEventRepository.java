@@ -13,6 +13,8 @@ interface PlannedEventRepository extends JpaRepository<PlannedEvent, UUID> {
 
     Optional<PlannedEvent> findByCurrentTrue();
 
+    Optional<PlannedEvent> findByTemplateIdAndTemplateDate(UUID templateId, java.time.LocalDate date);
+
     @Query("select distinct i.event from EventItem i where i.mediaId = :mediaId")
     List<PlannedEvent> findAllUsingMedia(UUID mediaId);
 

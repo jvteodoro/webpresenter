@@ -56,6 +56,13 @@ class PlannedEvent {
     @jakarta.persistence.AttributeOverride(name = "ref", column = @Column(name = "background_ref"))
     private webpresenter.server.playlists.BackgroundSource background;
 
+    /** The liturgy template this event was made from (and for which date), if any. */
+    @Column(name = "template_id")
+    private UUID templateId;
+
+    @Column(name = "template_date")
+    private java.time.LocalDate templateDate;
+
     protected PlannedEvent() {}
 
     PlannedEvent(String title, Instant startsAt, String createdBy, Instant now) {
@@ -109,6 +116,19 @@ class PlannedEvent {
         touch(now);
     }
 
+    void fromTemplate(UUID templateId, java.time.LocalDate date) {
+        this.templateId = templateId;
+        this.templateDate = date;
+    }
+
+    /** Puts {@code replacement} where the item {@code itemId} is. */
+    void replaceItem(UUID itemId, EventItem replacement, Instant now) {
+        int index = items.indexOf(item(itemId));
+        items.set(index, replacement);
+        renumber();
+        touch(now);
+    }
+
     void markCurrent(boolean current) {
         this.current = current;
     }
@@ -136,4 +156,7 @@ class PlannedEvent {
     String createdBy() { return createdBy; }
     Instant updatedAt() { return updatedAt; }
     webpresenter.server.playlists.BackgroundSource background() { return background; }
+    UUID templateId() { return templateId; }
+    java.time.LocalDate templateDate() { return templateDate; }
+    long pendingSlots() { return items.stream().filter(i -> i.type() == ItemType.SLOT).count(); }
 }

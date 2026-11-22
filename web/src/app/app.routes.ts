@@ -110,6 +110,21 @@ export const routes: Routes = [
     ],
   },
   {
+    path: 'calendario',
+    title: 'Calendário · webpresenter',
+    loadComponent: () => import('./features/calendar/calendar-page').then((m) => m.CalendarPage),
+  },
+  {
+    path: 'liturgia',
+    title: 'Liturgia · webpresenter',
+    loadComponent: () => import('./features/liturgy/liturgy-page').then((m) => m.LiturgyPage),
+  },
+  {
+    path: 'liturgia/:id',
+    title: 'Modelo de liturgia · webpresenter',
+    loadComponent: () => import('./features/liturgy/template-page').then((m) => m.TemplatePage),
+  },
+  {
     path: 'configuracoes',
     title: 'Configurações · webpresenter',
     loadComponent: () => import('./features/settings/settings-page').then((m) => m.SettingsPage),

@@ -27,6 +27,14 @@
     }
   </header>
 
+  @if (e.pendingSlots > 0) {
+    <p class="pending-slots" role="status">
+      <mat-icon>edit_calendar</mat-icon>
+      {{ e.pendingSlots }} {{ e.pendingSlots === 1 ? 'espaço' : 'espaços' }} da liturgia a preencher.
+      Enquanto vazios, não aparecem no telão.
+    </p>
+  }
+
   @if (canEdit()) {
     <section class="prepare card" [class.active]="e.current">
       @if (!e.current) {
@@ -111,7 +119,7 @@
     } @else {
       <ol class="items" cdkDropList [cdkDropListDisabled]="!canEdit() || saving()" (cdkDropListDropped)="drop($event)">
         @for (item of e.items; track item.id; let i = $index) {
-          <li class="item" [class.scene]="item.type === 'SCENE'" cdkDrag [attr.aria-label]="item.type === 'SCENE' ? 'Cena ' + item.title : item.title">
+          <li class="item" [class.scene]="item.type === 'SCENE'" [class.slot]="item.type === 'SLOT'" cdkDrag [attr.aria-label]="item.type === 'SCENE' ? 'Cena ' + item.title : item.title">
             @if (canEdit()) {
               <mat-icon class="handle" cdkDragHandle aria-label="Arrastar para reordenar">drag_indicator</mat-icon>
             }
@@ -128,6 +136,9 @@
               @if (item.type === 'TIMER') {
                 <span class="item-sub">{{ timerText(item) }}</span>
               }
+              @if (item.type === 'SLOT') {
+                <span class="item-sub">A preencher · {{ slotHint(item) }}</span>
+              }
               @if (item.type === 'SCENE' && sceneTimes(item)) {
                 <span class="item-sub">{{ sceneTimes(item) }}</span>
               }
@@ -136,7 +147,8 @@
               }
             </span>
             <span class="item-meta">
-              @if (item.type === 'SCENE') { Cena }
+              @if (item.type === 'SLOT') { }
+              @else if (item.type === 'SCENE') { Cena }
               @else if (item.type === 'CLOCK') { Relógio }
               @else if (item.type === 'TIMER') { Cronômetro }
               @else if (item.type === 'SLIDE') { Slide }
@@ -166,6 +178,18 @@
                   <button mat-icon-button aria-label="Editar slide" matTooltip="Editar slide" [disabled]="saving()" (click)="editSlide(item)">
                     <mat-icon>edit</mat-icon>
                   </button>
+                }
+                @if (item.type === 'SLOT') {
+                  @if (item.slotKind === 'ANY') {
+                    <button mat-flat-button class="fill" [matMenuTriggerFor]="fillMenu" [disabled]="saving()" [attr.aria-label]="'Escolher ' + item.title">Escolher</button>
+                    <mat-menu #fillMenu="matMenu">
+                      <button mat-menu-item (click)="fillSlot(item, 'SONG')"><mat-icon>queue_music</mat-icon>Música</button>
+                      <button mat-menu-item (click)="fillSlot(item, 'MEDIA')"><mat-icon>perm_media</mat-icon>Mídia</button>
+                      <button mat-menu-item (click)="fillSlot(item, 'SLIDE')"><mat-icon>text_fields</mat-icon>Slide</button>
+                    </mat-menu>
+                  } @else {
+                    <button mat-flat-button class="fill" (click)="fillSlot(item, $any(item.slotKind))" [disabled]="saving()" [attr.aria-label]="'Escolher ' + item.title">Escolher</button>
+                  }
                 }
                 @if (item.type === 'CLOCK' || item.type === 'TIMER') {
                   <button mat-icon-button [attr.aria-label]="item.type === 'TIMER' ? 'Editar cronômetro' : 'Editar relógio'" matTooltip="Editar" [disabled]="saving()" (click)="editClock(item)">

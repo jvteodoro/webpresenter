@@ -89,3 +89,8 @@
 .error {
   color: var(--mat-sys-error);
 }
+
+.pending {
+  color: var(--mat-sys-tertiary);
+  font-weight: 500;
+}

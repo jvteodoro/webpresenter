@@ -46,11 +46,17 @@
   font-size: 0.75rem;
 }
 
-// Medium screens: the mode switch shows only its icons (with tooltips) and the user menu only its icon.
-@media (max-width: 1440px) {
+// Medium screens: navigation, mode switch and user menu show only their icons (with tooltips).
+@media (max-width: 1599.98px) {
   .mode-label,
-  .user-name {
+  .user-name,
+  .nav-label {
     display: none;
+  }
+
+  .nav a {
+    min-width: 0;
+    padding: 0 12px;
   }
 
   .mode mat-icon {

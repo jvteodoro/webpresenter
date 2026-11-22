@@ -2,7 +2,8 @@
   <span class="brand">webpresenter</span>
   <nav class="nav">
     @for (entry of uiMode.nav(); track entry.path) {
-      <a mat-button [routerLink]="entry.path" routerLinkActive="active" [attr.aria-label]="entry.label">
+      <a mat-button [routerLink]="entry.path" routerLinkActive="active" [attr.aria-label]="entry.label"
+         [matTooltip]="entry.label" [matTooltipDisabled]="!compactNav()">
         @if (entry.path === '/fila' && jobs.activeCount() > 0) {
           <mat-icon [matBadge]="jobs.activeCount()" matBadgeSize="small" [attr.aria-hidden]="true">{{ entry.icon }}</mat-icon>
         } @else {

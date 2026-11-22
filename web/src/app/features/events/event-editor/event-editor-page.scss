@@ -270,3 +270,30 @@
 .event-background mat-icon {
   vertical-align: -0.15em;
 }
+
+.item.slot {
+  border: 1px dashed var(--mat-sys-primary);
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+
+  .kind,
+  .item-sub,
+  .position {
+    color: inherit;
+  }
+}
+
+.fill {
+  margin-right: 0.25rem;
+}
+
+.pending-slots {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+}

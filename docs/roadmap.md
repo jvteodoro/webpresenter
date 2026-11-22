@@ -68,6 +68,12 @@ Later job types (see `songs.md`): transcription, lyrics alignment, segmentation.
 Demucs runs on CPU by default (several minutes per song); a GPU, when present, is used
 automatically. Workers run as their own container in the production stack.
 
+Real runs (development machine, CPU): a 3 h YouTube audio downloaded and registered in about
+50 s; a 3:14 song separated in 3:49. torchaudio's sox backend crashes (segmentation fault) when
+saving on some systems, so the worker runs Demucs through `webpresenter_worker.demucs_runner`,
+which makes torchaudio save with soundfile. yt-dlp needs a JavaScript runtime (Node 20+) for
+YouTube: the image uses Debian trixie's Node.js.
+
 As implemented (phase B): module `jobs` (table `job`, REST under `/api/jobs`, SSE stream
 `/api/jobs/stream`), message protocol in `worker/README.md`. The server stays healthy without
 RabbitMQ (jobs then fail at once with a clear message and can be retried). Results are uploaded by
@@ -145,6 +151,14 @@ As implemented (phase C):
   filled, variable slots empty and highlighted. The event is *ready* when every variable slot is
   filled. Later template changes do not alter existing events.
 
+As implemented (phase E): templates live in the planning module (table `liturgy_template`, the
+slots as a JSON array of `ItemSpec`, validated like event items). An event made from a template
+keeps `template_id` and `template_date` (at most one per template and date); its variable slots
+are `SLOT` items (label and expected kind: song, media, slide or any), not presented, filled in
+place with `PUT /api/events/{id}/items/{itemId}/fill`. The calendar (web) expands the templates'
+weekdays in the browser's local time and offers "Criar" on days without the event; the start
+time is sent as an instant computed in local time.
+
 ## 6. Clock and timer
 
 - **Clock**: a full-screen clock, usable as the rest screen (device setting) or as an event item.
@@ -164,7 +178,7 @@ signals at the right moments, overtime, full-screen clock with the date, rest-sc
 
 ## Phases
 
-Status: phases A, C and D implemented; phase B implemented and tested with a simulated worker (real yt-dlp/Demucs run pending: network); E to do.
+Status: phases A to E implemented. Phase B verified with the real worker (YouTube import and Demucs separation).
 
 | Phase | Content |
 |---|---|

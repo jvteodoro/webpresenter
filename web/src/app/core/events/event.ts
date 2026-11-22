@@ -3,7 +3,8 @@ import { MediaKind } from '../media/media';
 import { BackgroundSource, BackgroundView } from '../audio/background';
 
 /** SCENE: a marker grouping the items after it (until the next scene); not presented. */
-export type ItemType = 'MEDIA' | 'SLIDE' | 'SONG' | 'SCENE' | 'CLOCK' | 'TIMER';
+/** SLOT: a liturgy template's variable slot, to be filled for this event; not presented. */
+export type ItemType = 'MEDIA' | 'SLIDE' | 'SONG' | 'SCENE' | 'CLOCK' | 'TIMER' | 'SLOT';
 
 export interface EventSummary {
   id: string;
@@ -12,6 +13,10 @@ export interface EventSummary {
   current: boolean;
   itemCount: number;
   updatedAt: string;
+  templateId: string | null;
+  /** "YYYY-MM-DD" of the template's day. */
+  templateDate: string | null;
+  pendingSlots: number;
 }
 
 export interface EventItem {
@@ -27,6 +32,8 @@ export interface EventItem {
   /** Shown above a clock or timer. */
   label: string | null;
   timer: TimerView | null;
+  /** For a variable slot: what it expects. */
+  slotKind?: 'SONG' | 'MEDIA' | 'SLIDE' | 'ANY' | null;
 }
 
 export type TimerMode = 'SCENE_END' | 'TIME' | 'DURATION';
@@ -81,6 +88,10 @@ export interface EventDetail {
   updatedAt: string;
   /** The event's own background music; null uses the platform's. */
   background: BackgroundView | null;
+  templateId: string | null;
+  templateDate: string | null;
+  /** Variable slots still to be filled. */
+  pendingSlots: number;
 }
 
 export interface EventInput {

@@ -17,6 +17,8 @@ import { EventDetail, EventInput, EventItem, Readiness, SceneInput, SlideInput }
 import { BackgroundView } from '../../../core/audio/background';
 import { BackgroundChoice, BackgroundPickerData, BackgroundPickerDialog } from '../../audio/background-picker-dialog';
 import { SceneDialog } from '../dialogs/scene-dialog';
+import { ItemSpecPicker } from '../../liturgy/item-spec-picker';
+import { ItemSpec } from '../../../core/liturgy/liturgy';
 import { TimerDialog, TimerDialogData, TimerDialogResult } from '../dialogs/timer-dialog';
 import { TextPromptDialog, TextPromptDialogData } from '../../../shared/dialogs/text-prompt-dialog';
 import { EventsApi } from '../../../core/events/events-api';
@@ -56,6 +58,7 @@ export class EventEditorPage {
   readonly id = input.required<string>();
 
   private readonly api = inject(EventsApi);
+  private readonly picker = inject(ItemSpecPicker);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly router = inject(Router);
@@ -95,9 +98,12 @@ export class EventEditorPage {
   /** Position among presented items (scenes are not numbered). */
   protected readonly positions = computed(() => {
     let n = 0;
+    // Slots are numbered: they hold the place of the item that will be chosen.
     return new Map((this.event()?.items ?? []).map((i) => [i.id, i.type === 'SCENE' ? 0 : ++n]));
   });
-  protected readonly presentedCount = computed(() => (this.event()?.items ?? []).filter((i) => i.type !== 'SCENE').length);
+  protected readonly presentedCount = computed(
+    () => (this.event()?.items ?? []).filter((i) => i.type !== 'SCENE' && i.type !== 'SLOT').length,
+  );
 
   /** "9:30–10:10" or "a partir de 9:30". */
   protected sceneTimes(item: EventItem): string {
@@ -126,6 +132,9 @@ export class EventEditorPage {
     }
     if (item.type === 'CLOCK') {
       return 'schedule';
+    }
+    if (item.type === 'SLOT') {
+      return 'edit_calendar';
     }
     if (item.type === 'TIMER') {
       return 'timer';
@@ -219,6 +228,17 @@ export class EventEditorPage {
       .afterClosed()
       .pipe(filter((slide): slide is SlideInput => !!slide))
       .subscribe((slide) => this.run(this.api.editSlide(this.id(), item.id, slide), 'editar slide'));
+  }
+
+  /** Fills a variable slot from the liturgy template with a song, media or slide (as the slot expects). */
+  protected fillSlot(item: EventItem, kind: 'SONG' | 'MEDIA' | 'SLIDE'): void {
+    this.picker.fill(kind).subscribe((spec: ItemSpec) => this.run(this.api.fillSlot(this.id(), item.id, spec), 'preencher'));
+  }
+
+  protected slotHint(item: EventItem): string {
+    return { SONG: 'Escolha uma música', MEDIA: 'Escolha uma mídia', SLIDE: 'Escreva o slide', ANY: 'Escolha uma música, mídia ou slide' }[
+      item.slotKind ?? 'ANY'
+    ];
   }
 
   protected addClock(): void {

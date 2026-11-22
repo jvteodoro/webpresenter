@@ -25,6 +25,7 @@
             <span class="meta">
               @if (e.startsAt) { {{ e.startsAt | date: "EEEE, d 'de' MMMM 'às' HH:mm" }} · }
               {{ e.itemCount }} {{ e.itemCount === 1 ? 'item' : 'itens' }}
+              @if (e.pendingSlots) { · <span class="pending">{{ e.pendingSlots }} a preencher</span> }
             </span>
           </span>
           @if (e.current) {

@@ -1,4 +1,7 @@
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { Component, OnInit, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -21,6 +24,11 @@ import { JobsStream } from '../../core/jobs/jobs-stream';
 export class Shell implements OnInit {
   protected readonly currentUser = inject(CurrentUser);
   protected readonly uiMode = inject(UiModeService);
+  /** Below this width the navigation shows icons only (tooltips give the names). */
+  protected readonly compactNav = toSignal(
+    inject(BreakpointObserver).observe('(max-width: 1599.98px)').pipe(map((s) => s.matches)),
+    { initialValue: false },
+  );
   /** Followed while signed in, for the active-jobs badge on "Fila". */
   protected readonly jobs = inject(JobsStream);
   private readonly router = inject(Router);
