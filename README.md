@@ -62,6 +62,31 @@ Its identity (device id and token) and media cache live in the OS's config and c
 `%LOCALAPPDATA%` on Windows), or under `--data-dir`. Delete the config folder to give a copied
 installation a new identity. `Shift+Esc` closes the player.
 
+#### Windows installer
+
+After cloning the repository on a 64-bit Windows PC, open PowerShell in the project folder and run
+the preparation/build script:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\build-windows-player.ps1
+```
+
+The script uses WinGet to install JDK 25, WiX Toolset 3, and 7-Zip, downloads the x64 libmpv
+development and runtime archives, and builds the self-contained installer. It needs internet access
+and may request administrator approval to install the build tools. The installer is written to
+`player\build\windows-installer`; it includes its own Java runtime, so Java is not needed on the
+event computer. Install it, then launch the player with the central server's LAN address, for
+example:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\WebPresenter MediaPlayer\WebPresenter MediaPlayer.exe" `
+  --server-url=http://192.168.1.10:8090
+```
+
+Replace the address with the computer hosting the central server. Approve the new device in
+**Dispositivos**; the player caches the event media locally before playback.
+
 Build and test everything Java: `./gradlew build` (the server tests use Testcontainers, so Docker
 must be running). Web unit tests: `cd web && npm test`.
 
