@@ -1,3 +1,5 @@
+import java.util.jar.JarFile
+
 plugins {
     id("webpresenter.java-conventions")
     application
@@ -57,7 +59,7 @@ val windowsInstaller by tasks.registering(Exec::class) {
         }
         val mainJars = appLib.get().asFile.listFiles { candidate ->
             candidate.isFile && candidate.extension.equals("jar", ignoreCase = true) && runCatching {
-                java.util.jar.JarFile(candidate).use { it.getJarEntry("webpresenter/player/Launcher.class") != null }
+                JarFile(candidate).use { it.getJarEntry("webpresenter/player/Launcher.class") != null }
             }.getOrDefault(false)
         }.orEmpty()
         if (mainJars.size != 1) {
