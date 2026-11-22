@@ -43,7 +43,10 @@ function Refresh-ToolPath {
 function Test-Jdk25 {
     $java = Get-Command java -ErrorAction SilentlyContinue
     if (-not $java) { return $false }
-    return ((& $java.Source -version 2>&1 | Out-String) -match 'version "25\.')
+    # java -version writes to stderr; PowerShell 5 treats native stderr as an error record
+    # when ErrorActionPreference is Stop. Let cmd.exe capture that stream as ordinary text.
+    $versionOutput = & $env:ComSpec /d /c "`"$($java.Source)`" -version 2>&1"
+    return (($versionOutput -join "`n") -match 'version "25\.')
 }
 
 function Test-Wix3 {
