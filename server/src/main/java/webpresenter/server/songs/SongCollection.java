@@ -27,6 +27,16 @@ class SongCollection {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
 
+    /** Cover image (library media; no cross-module foreign key). */
+    @Column(name = "cover_media_id")
+    private UUID coverMediaId;
+
+    private String description;
+
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(nullable = false)
+    private Source source = Source.IMPORT;
+
     protected SongCollection() {}
 
     SongCollection(String name, String slug, String groupName, int sortOrder) {
@@ -45,5 +55,19 @@ class SongCollection {
     String name() { return name; }
     String slug() { return slug; }
     String groupName() { return groupName; }
+    UUID coverMediaId() { return coverMediaId; }
+    String description() { return description; }
+    Source source() { return source; }
+
+    void describe(String name, String description, String groupName, UUID coverMediaId) {
+        this.name = name;
+        this.description = description;
+        this.groupName = groupName;
+        this.coverMediaId = coverMediaId;
+    }
+
+    void setSource(Source source) {
+        this.source = source;
+    }
     int sortOrder() { return sortOrder; }
 }

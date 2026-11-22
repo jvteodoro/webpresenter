@@ -53,11 +53,15 @@ class MediaController {
                 : ResponseEntity.ok(body);
     }
 
-    /** Library files; GENERAL only by default, {@code purpose=ALL} for everything. */
+    /** Library files; GENERAL only by default, a comma-separated list of purposes, or {@code ALL}. */
     @GetMapping
     List<MediaResponse> list(@RequestParam(value = "purpose", defaultValue = "GENERAL") String purpose) {
-        MediaPurpose filter = "ALL".equalsIgnoreCase(purpose) ? null : MediaPurpose.valueOf(purpose.toUpperCase());
-        return library.list(filter).stream().map(MediaResponse::of).toList();
+        if ("ALL".equalsIgnoreCase(purpose)) {
+            return library.list((MediaPurpose) null).stream().map(MediaResponse::of).toList();
+        }
+        var purposes = java.util.Arrays.stream(purpose.split(","))
+                .map(p -> MediaPurpose.valueOf(p.strip().toUpperCase())).distinct().toList();
+        return library.list(purposes).stream().map(MediaResponse::of).toList();
     }
 
     @GetMapping("/{id}")

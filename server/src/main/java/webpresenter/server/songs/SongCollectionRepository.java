@@ -10,4 +10,6 @@ interface SongCollectionRepository extends JpaRepository<SongCollection, UUID> {
     Optional<SongCollection> findBySlug(String slug);
 
     List<SongCollection> findAllByOrderBySortOrderAscNameAsc();
+
+    List<SongCollection> findAllByCoverMediaId(UUID coverMediaId);
 }

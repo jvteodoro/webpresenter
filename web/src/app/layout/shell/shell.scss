@@ -26,6 +26,15 @@
   flex: 1;
 }
 
+.mode {
+  font-size: 0.875rem;
+
+  mat-icon {
+    margin-right: 0.35rem;
+    vertical-align: middle;
+  }
+}
+
 .menu-user {
   display: flex;
   flex-direction: column;
@@ -45,8 +54,13 @@
 
   // Keep only the icons; the user's name is shown inside the menu.
   .user-name,
+  .mode-label,
   .nav-label {
     display: none;
+  }
+
+  .mode mat-icon {
+    margin-right: 0;
   }
 
   .nav a {

@@ -110,7 +110,8 @@ final class PlayerController implements ServerConnection.Listener {
                 identity.clearToken(); // the server no longer knows us as approved
                 leaveItem();
                 window.showInfo("Aguardando aprovação", pending.pairingCode(),
-                        "Aprove este player em Dispositivos no painel web\n" + identity.deviceId());
+                        "Aprove este player em Dispositivos no painel web\nServidor: " + serverLabel
+                                + "\n" + identity.deviceId());
             }
             case Message.Paired p -> {
                 identity.storeToken(p.token());

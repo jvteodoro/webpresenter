@@ -6,9 +6,9 @@
   (drop)="onDrop($event)"
 >
   <mat-icon class="drop-icon">cloud_upload</mat-icon>
-  <p>Arraste vídeos, áudios ou imagens para cá</p>
+  <p>{{ hint() }}</p>
   <button mat-stroked-button type="button" (click)="picker.click()">Escolher arquivos</button>
-  <input #picker type="file" multiple hidden accept="video/*,audio/*,image/*" (change)="onFilesSelected(picker)" />
+  <input #picker type="file" multiple hidden [accept]="accept()" (change)="onFilesSelected(picker)" />
 </div>
 
 @if (items().length > 0) {

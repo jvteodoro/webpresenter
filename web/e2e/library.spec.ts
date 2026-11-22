@@ -54,7 +54,7 @@ test.describe('Biblioteca de mídia', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Excluir' }).click();
     await expect(renamedRow).toHaveCount(0);
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Biblioteca de mídia' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Biblioteca' })).toBeVisible();
     await expect(mediaRow(page, renamed)).toHaveCount(0);
   });
 

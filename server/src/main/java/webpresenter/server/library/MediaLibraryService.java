@@ -112,6 +112,11 @@ class MediaLibraryService implements MediaCatalog {
     }
 
     @Transactional(readOnly = true)
+    List<MediaAsset> list(List<MediaPurpose> purposes) {
+        return repository.findAllByPurposeInOrderByCreatedAtDesc(purposes);
+    }
+
+    @Transactional(readOnly = true)
     List<MediaAsset> list(MediaPurpose purpose) {
         return purpose == null ? repository.findAllByOrderByCreatedAtDesc()
                 : repository.findAllByPurposeOrderByCreatedAtDesc(purpose);

@@ -10,5 +10,7 @@ interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
 
     List<MediaAsset> findAllByPurposeOrderByCreatedAtDesc(MediaPurpose purpose);
 
+    List<MediaAsset> findAllByPurposeInOrderByCreatedAtDesc(java.util.Collection<MediaPurpose> purposes);
+
     java.util.Optional<MediaAsset> findFirstBySha256AndSizeBytes(String sha256, long sizeBytes);
 }

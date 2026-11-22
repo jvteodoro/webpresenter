@@ -8,7 +8,7 @@ export const FIXTURES_DIR = join(tmpdir(), 'webpresenter-e2e');
 export type DevUser = 'admin' | 'tecnico' | 'lider' | 'musico';
 
 const HEADINGS: Record<string, string> = {
-  '/biblioteca': 'Biblioteca de mídia',
+  '/biblioteca/midia': 'Biblioteca',
   '/eventos': 'Eventos',
   '/dispositivos': 'Dispositivos',
 };
@@ -17,7 +17,7 @@ const HEADINGS: Record<string, string> = {
 export async function login(
   page: Page,
   user: DevUser,
-  path: keyof typeof HEADINGS = '/biblioteca',
+  path: keyof typeof HEADINGS = '/biblioteca/midia',
 ): Promise<void> {
   await page.goto(path);
   await page.locator('#username').fill(user);
@@ -28,4 +28,10 @@ export async function login(
 
 export function mediaRow(page: Page, title: string) {
   return page.locator('tr.mat-mdc-row').filter({ has: page.getByText(title, { exact: true }) });
+}
+
+/** From any page: the library's general media section. */
+export async function openLibraryMedia(page: Page): Promise<void> {
+  await page.getByRole('link', { name: 'Biblioteca', exact: true }).click();
+  await page.getByRole('tab', { name: 'Mídia' }).click();
 }

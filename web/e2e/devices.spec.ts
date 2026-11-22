@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FakePlayer, deleteDevice } from './fake-player';
-import { FIXTURES_DIR, login, mediaRow } from './fixtures';
+import { FIXTURES_DIR, login, mediaRow, openLibraryMedia } from './fixtures';
 
 const created: FakePlayer[] = [];
 
@@ -43,8 +43,13 @@ test.describe('Dispositivos', () => {
       await expect(pendingCard).toContainText(pairingCode);
       await expect(pendingCard).toContainText('Online');
 
-      // Approve with a name: the player receives its token and configuration.
-      await pendingCard.getByRole('button', { name: 'Aprovar' }).click();
+      // Approve by the code on its screen (case and dash do not matter); a wrong code says so.
+      const codeField = page.getByLabel('Código exibido no telão');
+      await codeField.fill('ZZZ-999');
+      await page.getByRole('button', { name: 'Aprovar por código' }).click();
+      await expect(page.getByRole('alert')).toContainText('Nenhum player aguardando aprovação com esse código');
+      await codeField.fill(pairingCode.replace('-', '').toLowerCase());
+      await page.getByRole('button', { name: 'Aprovar por código' }).click();
       const prompt = page.getByRole('dialog');
       await prompt.getByLabel('Nome do player').fill(name);
       await prompt.getByRole('button', { name: 'Salvar' }).click();
@@ -92,7 +97,7 @@ test.describe('Dispositivos', () => {
     }
 
     // Clean up the library item.
-    await page.getByRole('link', { name: 'Biblioteca' }).click();
+    await openLibraryMedia(page);
     await mediaRow(page, restTitle).getByRole('button', { name: 'Mais ações' }).click();
     await page.getByRole('menuitem', { name: 'Excluir' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Excluir' }).click();
@@ -119,6 +124,11 @@ test.describe('Dispositivos', () => {
 
   test('músico e líder não veem Dispositivos', async ({ page }) => {
     await login(page, 'musico');
+    // Musicians start in operation mode.
+    await expect(page.getByRole('link', { name: 'Ao vivo' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Dispositivos' })).toHaveCount(0);
+    // Not even in administration mode: it depends on the role, not on the mode.
+    await page.getByRole('radio', { name: 'Modo administrativo' }).click();
     await expect(page.getByRole('link', { name: 'Biblioteca' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Dispositivos' })).toHaveCount(0);
   });

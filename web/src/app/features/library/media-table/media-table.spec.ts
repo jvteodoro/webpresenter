@@ -13,6 +13,7 @@ const video: MediaAsset = {
   durationMs: 65_000,
   width: 1920,
   height: 1080,
+  purpose: 'GENERAL',
   createdAt: '2026-11-21T12:00:00Z',
   createdBy: 'tecnico',
 };

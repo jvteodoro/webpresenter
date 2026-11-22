@@ -1,10 +1,6 @@
-<header class="page-header">
-  <h1>Biblioteca de mídia</h1>
-</header>
-
 @if (currentUser.canManageLibrary()) {
   <section class="card">
-    <app-media-upload (uploaded)="onUploaded($event)" />
+    <app-media-upload [purpose]="purpose()" [accept]="accept()" [hint]="hint()" (uploaded)="onUploaded($event)" />
   </section>
 }
 
@@ -15,12 +11,14 @@
       <mat-label>Buscar</mat-label>
       <input matInput [ngModel]="search()" (ngModelChange)="search.set($event)" />
     </mat-form-field>
-    <mat-button-toggle-group [value]="kind()" (change)="kind.set($event.value)" hideSingleSelectionIndicator>
-      <mat-button-toggle value="ALL">Todas</mat-button-toggle>
-      <mat-button-toggle value="VIDEO">Vídeos</mat-button-toggle>
-      <mat-button-toggle value="AUDIO">Áudios</mat-button-toggle>
-      <mat-button-toggle value="IMAGE">Imagens</mat-button-toggle>
-    </mat-button-toggle-group>
+    @if (kindFilter()) {
+      <mat-button-toggle-group [value]="kind()" (change)="kind.set($event.value)" hideSingleSelectionIndicator>
+        <mat-button-toggle value="ALL">Todas</mat-button-toggle>
+        <mat-button-toggle value="VIDEO">Vídeos</mat-button-toggle>
+        <mat-button-toggle value="AUDIO">Áudios</mat-button-toggle>
+        <mat-button-toggle value="IMAGE">Imagens</mat-button-toggle>
+      </mat-button-toggle-group>
+    }
   </div>
 
   @if (loading()) {
@@ -32,7 +30,7 @@
   } @else if (!loading() && visible().length === 0) {
     <p class="empty">
       @if (assets().length === 0) {
-        Nenhuma mídia na biblioteca ainda.
+        {{ emptyText() }}
       } @else {
         Nenhuma mídia encontrada com esses filtros.
       }

@@ -38,11 +38,17 @@ class SongService implements MediaUsage, SongCatalog {
 
     @Transactional(readOnly = true)
     Page search(String query, String collection, int offset, int limit) {
+        return search(query, collection, false, offset, limit);
+    }
+
+    /** @param loose only songs that are in no album */
+    @Transactional(readOnly = true)
+    Page search(String query, String collection, boolean loose, int offset, int limit) {
         String term = normalize(query == null ? "" : query);
         int size = Math.clamp(limit, 1, 200);
-        List<Song> found = songs.search(term, blankToNull(collection), PageRequest.of(offset / size, size));
+        List<Song> found = songs.search(term, blankToNull(collection), loose, PageRequest.of(offset / size, size));
         found.forEach(SongService::load);
-        return new Page(found, songs.countSearch(term, blankToNull(collection)));
+        return new Page(found, songs.countSearch(term, blankToNull(collection), loose));
     }
 
     @Transactional(readOnly = true)
@@ -186,6 +192,7 @@ class SongService implements MediaUsage, SongCatalog {
         List<String> usages = new ArrayList<>();
         songs.findAllWithRecordingMedia(mediaId).forEach(s -> usages.add("música \"" + s.title() + "\" (gravação)"));
         songs.findAllByBackgroundMediaId(mediaId).forEach(s -> usages.add("música \"" + s.title() + "\" (fundo)"));
+        collections.findAllByCoverMediaId(mediaId).forEach(a -> usages.add("álbum \"" + a.name() + "\" (capa)"));
         return usages;
     }
 

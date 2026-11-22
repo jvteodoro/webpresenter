@@ -2,7 +2,7 @@ import { HttpClient, HttpEvent, HttpEventType } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, filter, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { DownloadUrl, MediaAsset } from './media';
+import { DownloadUrl, MediaAsset, MediaPurpose } from './media';
 
 /** Progress of an upload: percentage while sending, then the created asset. */
 export type UploadProgress = { state: 'uploading'; percent: number } | { state: 'done'; asset: MediaAsset };
@@ -12,13 +12,15 @@ export class MediaApi {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${environment.apiUrl}/api/media`;
 
-  list(): Observable<MediaAsset[]> {
-    return this.http.get<MediaAsset[]>(this.baseUrl);
+  /** Library files with any of the given purposes (general media by default). */
+  list(purposes: MediaPurpose[] = ['GENERAL']): Observable<MediaAsset[]> {
+    return this.http.get<MediaAsset[]>(this.baseUrl, { params: { purpose: purposes.join(',') } });
   }
 
-  upload(file: File, title?: string): Observable<UploadProgress> {
+  upload(file: File, title?: string, purpose: MediaPurpose = 'GENERAL'): Observable<UploadProgress> {
     const form = new FormData();
     form.append('file', file, file.name);
+    form.append('purpose', purpose);
     if (title) {
       form.append('title', title);
     }

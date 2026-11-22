@@ -2,7 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -12,6 +12,14 @@ import { catchError, debounceTime, distinctUntilChanged, of, switchMap } from 'r
 import { RECORDING_LABELS, SongDetail, SongPage } from '../../../core/songs/song';
 import { SongsApi } from '../../../core/songs/songs-api';
 import { DurationPipe } from '../../../shared/pipes/duration.pipe';
+
+/**
+ * event: a recording or lyrics only (default); playlist: a recording is required (playlists play audio);
+ * album: only the song.
+ */
+export interface SongPickerData {
+  mode?: 'event' | 'playlist' | 'album';
+}
 
 export interface SongChoice {
   songId: string;
@@ -59,8 +67,13 @@ export interface SongChoice {
               @if (r.timing && r.timingCurrent) { · a letra avança sozinha } @else { · sem tempos (avanço manual) }
             </mat-radio-button>
           }
-          <mat-radio-button [value]="null">Sem áudio · a banda toca, a letra avança pelo controle</mat-radio-button>
+          @if (mode !== 'playlist') {
+            <mat-radio-button [value]="null">Sem áudio · a banda toca, a letra avança pelo controle</mat-radio-button>
+          }
         </mat-radio-group>
+        @if (mode === 'playlist' && song.recordings.length === 0) {
+          <p class="empty">Esta música não tem áudio; playlists só tocam músicas com gravação.</p>
+        }
       } @else {
         <mat-progress-bar mode="indeterminate" />
       }
@@ -70,7 +83,7 @@ export interface SongChoice {
         <button mat-button type="button" (click)="selected.set(null)">Voltar</button>
       }
       <button mat-button mat-dialog-close>Cancelar</button>
-      <button mat-flat-button [disabled]="!selected()" (click)="confirm()">Adicionar</button>
+      <button mat-flat-button [disabled]="!selected() || (mode === 'playlist' && !recordingId())" (click)="confirm()">Adicionar</button>
     </mat-dialog-actions>
   `,
   styles: `
@@ -92,6 +105,7 @@ export interface SongChoice {
 export class SongPickerDialog {
   private readonly api = inject(SongsApi);
   private readonly ref = inject(MatDialogRef<SongPickerDialog, SongChoice>);
+  protected readonly mode = inject<SongPickerData | null>(MAT_DIALOG_DATA, { optional: true })?.mode ?? 'event';
   protected readonly labels = RECORDING_LABELS;
 
   protected readonly query = signal('');
@@ -107,6 +121,10 @@ export class SongPickerDialog {
   );
 
   protected select(id: string): void {
+    if (this.mode === 'album') {
+      this.ref.close({ songId: id, recordingId: null });
+      return;
+    }
     this.api.get(id).subscribe((song) => {
       // Default: the sung recording with timing, else any recording, else lyrics only.
       const best = song.recordings.find((r) => r.kind === 'SUNG' && r.timingCurrent) ?? song.recordings[0];

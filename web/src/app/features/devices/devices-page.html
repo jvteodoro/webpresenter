@@ -12,6 +12,16 @@
     <p class="error">Sem resposta do servidor; tentando novamente…</p>
   }
 
+  <form class="by-code" (submit)="$event.preventDefault(); approveByCode()">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Código exibido no telão</mat-label>
+      <input matInput name="code" [ngModel]="code()" (ngModelChange)="code.set($event); codeError.set(null)"
+             placeholder="Ex.: B4F-A8T" autocomplete="off" />
+    </mat-form-field>
+    <button mat-flat-button type="submit" [disabled]="!code().trim()">Aprovar por código</button>
+    @if (codeError()) { <span class="error" role="alert">{{ codeError() }}</span> }
+  </form>
+
   @if (pending().length > 0) {
     <section>
       <h2 class="section-title">

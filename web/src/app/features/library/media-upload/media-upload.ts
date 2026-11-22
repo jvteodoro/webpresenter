@@ -1,9 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, inject, output, signal } from '@angular/core';
+import { Component, inject, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MediaAsset } from '../../../core/media/media';
+import { MediaAsset, MediaPurpose } from '../../../core/media/media';
 import { MediaApi } from '../../../core/media/media-api';
 import { FileSizePipe } from '../../../shared/pipes/file-size.pipe';
 
@@ -24,6 +24,12 @@ interface UploadItem {
 })
 export class MediaUpload {
   private readonly api = inject(MediaApi);
+
+  /** Purpose given to every uploaded file. */
+  readonly purpose = input<MediaPurpose>('GENERAL');
+  /** File types offered by the picker. */
+  readonly accept = input('video/*,audio/*,image/*');
+  readonly hint = input('Arraste vídeos, áudios ou imagens para cá');
 
   readonly uploaded = output<MediaAsset>();
 
@@ -85,7 +91,7 @@ export class MediaUpload {
   private uploadOne(id: number, file: File): Promise<void> {
     this.patch(id, { status: 'uploading' });
     return new Promise((resolve) => {
-      this.api.upload(file).subscribe({
+      this.api.upload(file, undefined, this.purpose()).subscribe({
         next: (progress) => {
           if (progress.state === 'uploading') {
             // At 100% the server is still hashing, probing and storing the file.

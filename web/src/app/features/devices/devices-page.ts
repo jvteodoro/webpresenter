@@ -1,7 +1,11 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormsModule } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -20,7 +24,7 @@ const REFRESH_MS = 3000;
 /** MediaPlayers: approve new ones, configure and remove. */
 @Component({
   selector: 'app-devices-page',
-  imports: [MatIconModule, MatProgressBarModule, DeviceCard],
+  imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatIconModule, MatProgressBarModule, DeviceCard],
   templateUrl: './devices-page.html',
   styleUrl: './devices-page.scss',
 })
@@ -48,6 +52,21 @@ export class DevicesPage {
         },
         error: () => this.loadError.set(true),
       });
+  }
+
+  protected readonly code = signal('');
+  protected readonly codeError = signal<string | null>(null);
+
+  /** Finds the pending player showing this code (case, spaces and dashes ignored) and asks for its name. */
+  protected approveByCode(): void {
+    const wanted = normalizeCode(this.code());
+    const device = this.pending().find((d) => normalizeCode(d.pairingCode ?? '') === wanted);
+    if (!device) {
+      this.codeError.set('Nenhum player aguardando aprovação com esse código. Confira o telão e se o player está ligado a este servidor.');
+      return;
+    }
+    this.code.set('');
+    this.openApprove(device);
   }
 
   protected openApprove(device: Device): void {
@@ -117,4 +136,8 @@ export class DevicesPage {
   private notify(message: string): void {
     this.snackBar.open(message, 'OK', { duration: 4000 });
   }
+}
+
+function normalizeCode(code: string): string {
+  return code.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }

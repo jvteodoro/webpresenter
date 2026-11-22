@@ -7,5 +7,11 @@ public enum MediaPurpose {
     /** Recording of a song (sung or playback). */
     SONG_AUDIO,
     /** Background image or video of song slides. */
-    SONG_BACKGROUND
+    SONG_BACKGROUND,
+    /** Music played softly when nothing else sounds (rest screen, slides). */
+    BACKGROUND_MUSIC,
+    /** Short sound used by timers and cues. */
+    SOUND_EFFECT,
+    /** Cover image of an album or playlist. */
+    COVER
 }

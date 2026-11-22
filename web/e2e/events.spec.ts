@@ -2,7 +2,7 @@ import { Locator, Page, expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FakePlayer, approveDevice, deleteDevice, deleteTestData } from './fake-player';
-import { FIXTURES_DIR, login, mediaRow } from './fixtures';
+import { FIXTURES_DIR, login, mediaRow, openLibraryMedia } from './fixtures';
 
 /**
  * CDK drag and drop reacts to real pointer movement: press, move past the drag threshold, glide
@@ -148,7 +148,7 @@ test.describe('Eventos', () => {
       );
 
       // Media in use cannot be deleted from the library.
-      await page.getByRole('link', { name: 'Biblioteca' }).click();
+      await openLibraryMedia(page);
       await deleteFromLibrary(page, video);
       await expect(
         page.getByText(`"${video}" está em uso no evento "${eventTitle}"`),
@@ -163,7 +163,7 @@ test.describe('Eventos', () => {
       await expect(page.getByRole('heading', { level: 1, name: 'Eventos' })).toBeVisible();
       expect((await player.next('PREPARE')).eventId).toBeNull();
 
-      await page.getByRole('link', { name: 'Biblioteca' }).click();
+      await openLibraryMedia(page);
       await deleteFromLibrary(page, video);
       await expect(mediaRow(page, video)).toHaveCount(0);
       await deleteFromLibrary(page, image);

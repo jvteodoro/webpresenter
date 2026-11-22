@@ -1,31 +1,24 @@
 <mat-toolbar class="toolbar">
   <span class="brand">webpresenter</span>
   <nav class="nav">
-    <a mat-button routerLink="/ao-vivo" routerLinkActive="active" aria-label="Ao vivo">
-      <mat-icon>live_tv</mat-icon>
-      <span class="nav-label">Ao vivo</span>
-    </a>
-    <a mat-button routerLink="/eventos" routerLinkActive="active" aria-label="Eventos">
-      <mat-icon>event_list</mat-icon>
-      <span class="nav-label">Eventos</span>
-    </a>
-    <a mat-button routerLink="/musicas" routerLinkActive="active" aria-label="Músicas">
-      <mat-icon>queue_music</mat-icon>
-      <span class="nav-label">Músicas</span>
-    </a>
-    <a mat-button routerLink="/biblioteca" routerLinkActive="active" aria-label="Biblioteca">
-      <mat-icon>video_library</mat-icon>
-      <span class="nav-label">Biblioteca</span>
-    </a>
-    @if (currentUser.canManageDevices()) {
-      <a mat-button routerLink="/dispositivos" routerLinkActive="active" aria-label="Dispositivos">
-        <mat-icon>connected_tv</mat-icon>
-        <span class="nav-label">Dispositivos</span>
+    @for (entry of uiMode.nav(); track entry.path) {
+      <a mat-button [routerLink]="entry.path" routerLinkActive="active" [attr.aria-label]="entry.label">
+        <mat-icon>{{ entry.icon }}</mat-icon>
+        <span class="nav-label">{{ entry.label }}</span>
       </a>
     }
   </nav>
   <span class="spacer"></span>
   @if (currentUser.user()) {
+    <mat-button-toggle-group class="mode" [value]="uiMode.mode()" (change)="switchMode($event.value)"
+                             hideSingleSelectionIndicator aria-label="Modo da interface">
+      <mat-button-toggle value="operation" aria-label="Modo de operação">
+        <mat-icon>play_circle</mat-icon><span class="mode-label">Operação</span>
+      </mat-button-toggle>
+      <mat-button-toggle value="admin" aria-label="Modo administrativo">
+        <mat-icon>tune</mat-icon><span class="mode-label">Administração</span>
+      </mat-button-toggle>
+    </mat-button-toggle-group>
     <button mat-button [matMenuTriggerFor]="userMenu" class="user" [attr.aria-label]="currentUser.displayName()">
       <mat-icon>account_circle</mat-icon>
       <span class="user-name">{{ currentUser.displayName() }}</span>

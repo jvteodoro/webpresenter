@@ -11,11 +11,12 @@ Conversion to the webpresenter song model (docs/songs.md):
   - instrumental breaks reference one shared INSTRUMENTAL part;
   - slide start times become the timing of the SUNG recording, playback start times the timing of
     the PLAYBACK recording (cues out of time order are dropped);
-  - albums become collections (number = track), grouped by their LouvorJA category.
+  - albums become collections (number = track), grouped by their LouvorJA category;
+  - album covers (BMP) are converted to JPEG and set as the album covers.
 
 Usage:
   WEBPRESENTER_PASSWORD=... import_to_webpresenter.py --export-dir DIR --server URL --user NAME
-      [--keycloak URL] [--limit N] [--workers 4]
+      [--keycloak URL] [--limit N] [--workers 4] [--covers-only]
 
 Progress is saved in DIR/import-state.json, so an interrupted run resumes where it stopped.
 """
@@ -24,6 +25,7 @@ import collections
 import concurrent.futures
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -67,6 +69,17 @@ class Api:
         if r.status_code not in (200, 201):
             raise RuntimeError(f"upload {path.name}: HTTP {r.status_code} {r.text[:200]}")
         return r.json()["id"]
+
+    def get(self, path):
+        r = self.session.get(f"{self.server}{path}", headers=self.headers(), timeout=60)
+        r.raise_for_status()
+        return r.json()
+
+    def set_cover(self, album_id, media_id):
+        r = self.session.put(f"{self.server}/api/albums/{album_id}/cover", headers=self.headers(),
+                             json={"coverMediaId": media_id}, timeout=60)
+        if r.status_code != 200:
+            raise RuntimeError(f"cover of album {album_id}: HTTP {r.status_code} {r.text[:200]}")
 
     def import_song(self, payload):
         r = self.session.post(f"{self.server}/api/songs/import", headers=self.headers(), json=payload, timeout=60)
@@ -154,6 +167,40 @@ def most_common_background(song):
     return bg["path"] if bg and bg.get("available") else None
 
 
+def import_covers(api, data, export_dir, state, save_state):
+    """Converts LouvorJA album covers to JPEG, uploads them and sets them on the albums."""
+    by_slug = {a["slug"]: a for a in api.get("/api/albums")}
+    converted_dir = export_dir / "covers-jpg"
+    converted_dir.mkdir(exist_ok=True)
+    state.setdefault("covers", {})
+    done = failed = 0
+    for album in data["albums"]:
+        cover = album.get("cover")
+        target = by_slug.get(f"louvorja-{album['id']}")
+        if not cover or not cover.get("available") or not target:
+            continue
+        try:
+            media_id = state["covers"].get(cover["path"])
+            if not media_id:
+                jpg = converted_dir / (Path(cover["path"]).stem + ".jpg")
+                if not jpg.exists():
+                    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(export_dir / cover["path"]),
+                                    "-q:v", "2", str(jpg)], check=True)
+                renamed = converted_dir / f"Capa - {album['name'].replace('/', '-')}.jpg"
+                if not renamed.exists():
+                    os.link(jpg, renamed)
+                media_id = api.upload(renamed, "COVER")
+                state["covers"][cover["path"]] = media_id
+                save_state()
+            if target.get("coverMediaId") != media_id:
+                api.set_cover(target["id"], media_id)
+            done += 1
+        except Exception as e:  # keep going
+            failed += 1
+            print("  FAILED cover", album["name"], e, flush=True)
+    print(f"covers: {done} albums with cover, {failed} failures", flush=True)
+
+
 # ---------------------------------------------------------------------- main
 
 def main():
@@ -164,6 +211,7 @@ def main():
     p.add_argument("--user", required=True)
     p.add_argument("--limit", type=int)
     p.add_argument("--workers", type=int, default=4)
+    p.add_argument("--covers-only", action="store_true", help="only (re)apply album covers")
     args = p.parse_args()
 
     password = os.environ.get("WEBPRESENTER_PASSWORD")
@@ -181,6 +229,10 @@ def main():
             tmp = state_file.with_suffix(".tmp")
             tmp.write_text(json.dumps(state))
             tmp.replace(state_file)
+
+    if args.covers_only:
+        import_covers(api, data, args.export_dir, state, save_state)
+        return
 
     categories = {c["id"]: c["name"] for c in data["collections"]}
     albums = {a["id"]: a for a in data["albums"]}
@@ -275,6 +327,7 @@ def main():
             save_state()
             print(f"  songs imported {imported}/{len(songs)}", flush=True)
     save_state()
+    import_covers(api, data, args.export_dir, state, save_state)
     print(f"done: {imported} songs imported, {skipped} without slides, {len(failures)} failures "
           f"in {time.time() - started:.0f}s", flush=True)
     for f in failures[:20]:

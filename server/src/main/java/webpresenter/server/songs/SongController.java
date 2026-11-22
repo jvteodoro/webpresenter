@@ -42,8 +42,9 @@ class SongController {
 
     @GetMapping("/songs")
     SongPage search(@RequestParam(defaultValue = "") String q, @RequestParam(required = false) String collection,
+            @RequestParam(defaultValue = "false") boolean loose,
             @RequestParam(defaultValue = "0") int offset, @RequestParam(defaultValue = "50") int limit) {
-        var page = service.search(q, collection, offset, limit);
+        var page = service.search(q, collection, loose, offset, limit);
         return new SongPage(page.songs().stream().map(this::summary).toList(), page.total(), offset);
     }
 

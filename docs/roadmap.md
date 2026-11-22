@@ -23,7 +23,19 @@ images. Library media gains two purposes: `BACKGROUND_MUSIC` and `SOUND_EFFECT`.
 ### Library page sections
 
 Álbuns (cover grid → album page with tracks) · Playlists · Músicas avulsas · Fundos musicais ·
-Efeitos sonoros · Mídia (today's general media). Search works across sections.
+Efeitos sonoros · Mídia (today's general media).
+
+As implemented (phase A):
+
+- Albums are grouped in the grid by their group (LouvorJA category, or one typed by people).
+  Imported albums keep their tracks and numbers (hymnal numbers); people can change their name,
+  description and cover. Albums made by people have their tracks added, reordered and removed.
+- Covers are library images with purpose `COVER`; a cover in use cannot be deleted.
+- Playlists hold songs (with the recording to play; songs without audio are refused) and library
+  audio/video; worship leaders, AV technicians and admins edit them.
+- `GET /api/media?purpose=A,B` lists several purposes; uploads take a `purpose`.
+- The LouvorJA import tool converts the album covers (BMP → JPEG) and sets them
+  (`--covers-only` applies only that step).
 
 ## 2. Ingestion and processing pipeline
 
@@ -89,7 +101,9 @@ also used by the timer (scene end time) and the operation view.
   leaders and musicians.
 - **Administration mode**: events, calendar, liturgy, songs, library, jobs, devices, settings.
   Default for admins and AV technicians.
-- A mode switch in the header; the mode decides navigation and the start page.
+- A mode switch in the header; the mode decides navigation and the start page. The default
+  follows the roles (admins and AV technicians: administration; others: operation) and the
+  choice is remembered per browser. Permissions do not depend on the mode.
 
 ## 5. Calendar and liturgy
 
@@ -112,6 +126,8 @@ also used by the timer (scene end time) and the operation view.
   channel. Visible on the players' output and in operation mode.
 
 ## Phases
+
+Status: phase A implemented; B–E to do.
 
 | Phase | Content |
 |---|---|

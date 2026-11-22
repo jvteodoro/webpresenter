@@ -42,5 +42,6 @@ class CollectionEntry {
     }
 
     SongCollection collection() { return collection; }
+    Song song() { return song; }
     String number() { return number; }
 }

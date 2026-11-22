@@ -3,21 +3,28 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MEDIA_KIND_ICONS, MediaAsset } from '../../../core/media/media';
+import { MEDIA_KIND_ICONS, MediaAsset, MediaKind, MediaPurpose } from '../../../core/media/media';
 import { MediaApi } from '../../../core/media/media-api';
 import { DurationPipe } from '../../../shared/pipes/duration.pipe';
 import { normalizeText } from '../../../shared/text';
+
+/** Which files to offer: library purposes (general media by default), kinds (all by default), dialog title. */
+export interface MediaPickerData {
+  purposes?: MediaPurpose[];
+  kinds?: MediaKind[];
+  title?: string;
+}
 
 /** Picks one or more library files, in the order they were checked. Closes with their ids. */
 @Component({
   selector: 'app-media-picker-dialog',
   imports: [FormsModule, MatDialogModule, MatButtonModule, MatCheckboxModule, MatFormFieldModule, MatIconModule, MatInputModule, DurationPipe],
   template: `
-    <h2 mat-dialog-title>Adicionar mídias</h2>
+    <h2 mat-dialog-title>{{ data?.title ?? 'Adicionar mídias' }}</h2>
     <mat-dialog-content>
       <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search">
         <mat-icon matPrefix>search</mat-icon>
@@ -76,13 +83,17 @@ import { normalizeText } from '../../../shared/text';
 })
 export class MediaPickerDialog {
   private readonly ref = inject(MatDialogRef<MediaPickerDialog, string[]>);
-  private readonly media = toSignal(inject(MediaApi).list(), { initialValue: [] as MediaAsset[] });
+  protected readonly data = inject<MediaPickerData | null>(MAT_DIALOG_DATA, { optional: true });
+  private readonly media = toSignal(inject(MediaApi).list(this.data?.purposes ?? ['GENERAL']), { initialValue: [] as MediaAsset[] });
 
   protected readonly search = signal('');
   protected readonly selected = signal<string[]>([]);
   protected readonly visible = computed(() => {
     const term = normalizeText(this.search());
-    return this.media().filter((m) => !term || normalizeText(m.title).includes(term));
+    const kinds = this.data?.kinds;
+    return this.media().filter(
+      (m) => (!kinds || kinds.includes(m.kind)) && (!term || normalizeText(m.title).includes(term)),
+    );
   });
 
   protected icon(m: MediaAsset): string {

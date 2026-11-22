@@ -125,7 +125,7 @@ export async function deleteTestData(marker: string): Promise<void> {
 }
 
 /** Uploads a fixture file to the library as the AV technician; returns the media id. */
-export async function uploadMedia(file: string, title: string, mimeType: string): Promise<string> {
+export async function uploadMedia(file: string, title: string, mimeType: string, purpose = 'GENERAL'): Promise<string> {
   const { readFileSync } = await import('node:fs');
   const form = new FormData();
   form.append(
@@ -133,6 +133,7 @@ export async function uploadMedia(file: string, title: string, mimeType: string)
     new Blob([readFileSync(file)], { type: mimeType }),
     `${title}.${file.split('.').pop()}`,
   );
+  form.append('purpose', purpose);
   const response = await fetch('http://localhost:8090/api/media', {
     method: 'POST',
     headers: { Authorization: `Bearer ${await apiToken('tecnico')}` },

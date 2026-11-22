@@ -10,8 +10,9 @@ export class SongsApi {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${environment.apiUrl}/api`;
 
-  search(q: string, collection: string | null, offset: number, limit = 50): Observable<SongPage> {
-    let params = new HttpParams().set('q', q).set('offset', offset).set('limit', limit);
+  /** @param loose only songs in no album */
+  search(q: string, collection: string | null, offset: number, limit = 50, loose = false): Observable<SongPage> {
+    let params = new HttpParams().set('q', q).set('offset', offset).set('limit', limit).set('loose', loose);
     if (collection) {
       params = params.set('collection', collection);
     }

@@ -40,13 +40,24 @@ export class CurrentUser {
   readonly canEditSongs = computed(() => this.hasAnyRole('ADMIN', 'AV_TECHNICIAN'));
   /** May create and change events and prepare players for them. */
   readonly canEditEvents = computed(() => this.hasAnyRole('ADMIN', 'AV_TECHNICIAN', 'WORSHIP_LEADER'));
+  /** May create and change playlists. */
+  readonly canEditPlaylists = computed(() => this.hasAnyRole('ADMIN', 'AV_TECHNICIAN', 'WORSHIP_LEADER'));
   /** May control the live presentation. */
   readonly canControlLive = computed(() => this.hasAnyRole('ADMIN', 'AV_TECHNICIAN', 'WORSHIP_LEADER'));
   /** May approve, configure and remove MediaPlayers. */
   readonly canManageDevices = computed(() => this.hasAnyRole('ADMIN', 'AV_TECHNICIAN'));
 
-  async load(): Promise<void> {
-    this.state.set(await firstValueFrom(this.http.get<User>(`${environment.apiUrl}/api/me`)));
+  private loading: Promise<void> | null = null;
+
+  /** Loads the user once; later calls share the same request. */
+  load(): Promise<void> {
+    this.loading ??= firstValueFrom(this.http.get<User>(`${environment.apiUrl}/api/me`))
+      .then((user) => this.state.set(user))
+      .catch((e) => {
+        this.loading = null;
+        throw e;
+      });
+    return this.loading;
   }
 
   hasAnyRole(...roles: Role[]): boolean {

@@ -72,8 +72,9 @@ test.describe('Músicas ao vivo', () => {
       await musician.goto('/ao-vivo');
 
       await leader.getByRole('button', { name: 'Próximo' }).click();
+      // slide null = from the beginning (the player shows the first slide of a song without timing).
       const play = await player.next('PLAY');
-      expect(play.slide).toBe(0);
+      expect(play.slide).toBeNull();
       await expect(leader.getByLabel('Letra no telão')).toContainText('Castelo forte é nosso Deus');
       await expect(leader.getByRole('article', { name: 'A seguir' })).toContainText(
         'Refúgio e fortaleza',
