@@ -72,9 +72,11 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\build-windows-player.ps1
 ```
 
-The script uses WinGet to install JDK 25, WiX Toolset 3, and 7-Zip, downloads the x64 libmpv
-development and runtime archives, and builds the self-contained installer. It needs internet access
-and may request administrator approval to install the build tools. The installer is written to
+The script uses WinGet to install any missing JDK 25, WiX Toolset 3, and 7-Zip tools, enables
+Windows .NET Framework 3.5 (required by WiX), downloads the x64 libmpv development and runtime
+archives, and builds the self-contained installer. It needs internet access and will request
+administrator approval if WiX needs installation. You can rerun it safely after an interrupted
+setup; already installed tools are detected and skipped. The installer is written to
 `player\build\windows-installer`; it includes its own Java runtime, so Java is not needed on the
 event computer. Install it, then launch the player with the central server's LAN address, for
 example:
