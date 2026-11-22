@@ -30,6 +30,8 @@ export interface Device {
   displays: DisplayInfo[];
   displayIndex: number;
   restScreen: { mediaId: string; title: string; kind: MediaKind } | null;
+  /** Shows the time over the rest screen. */
+  restClock: boolean;
   cacheStatus: CacheStatus | null;
   lastSeenAt: string;
   approvedAt: string | null;
@@ -40,6 +42,7 @@ export interface DeviceSettings {
   name: string;
   displayIndex: number;
   restMediaId: string | null;
+  restClock: boolean;
 }
 
 /** "Tela 2 · 1920×1080 (principal)", using physical pixels as operators know them. */

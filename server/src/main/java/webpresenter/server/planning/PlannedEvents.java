@@ -29,13 +29,19 @@ public interface PlannedEvents {
          *     event's; null inherits the platform's
          */
         public record Item(UUID id, ItemType type, UUID mediaId, String slideTitle, String slideBody, UUID songId,
-                UUID recordingId, Scene scene, BackgroundSource background) {
+                UUID recordingId, Scene scene, BackgroundSource background, String label, Timer timer) {
 
             public Item(UUID id, ItemType type, UUID mediaId, String slideTitle, String slideBody, UUID songId,
                     UUID recordingId) {
-                this(id, type, mediaId, slideTitle, slideBody, songId, recordingId, null, null);
+                this(id, type, mediaId, slideTitle, slideBody, songId, recordingId, null, null, null, null);
             }
         }
+
+        /**
+         * A timer's resolved target: a local time (its own, or its scene's end) or a duration from
+         * when the item starts; neither when "end of scene" has no end time (it only counts up).
+         */
+        public record Timer(java.time.LocalTime targetTime, Integer durationSeconds, List<TimerSettings.Signal> signals) {}
 
         public record Scene(UUID id, String title, java.time.LocalTime starts, java.time.LocalTime ends) {}
     }

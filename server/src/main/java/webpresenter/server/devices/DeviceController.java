@@ -52,7 +52,7 @@ class DeviceController {
 
     @PutMapping("/{id}/settings")
     DeviceService.DeviceView configure(@PathVariable UUID id, @Valid @RequestBody SettingsRequest request) {
-        return devices.configure(id, request.name(), request.displayIndex(), request.restMediaId());
+        return devices.configure(id, request.name(), request.displayIndex(), request.restMediaId(), request.restClock());
     }
 
     @DeleteMapping("/{id}")
@@ -63,7 +63,8 @@ class DeviceController {
 
     record ApproveRequest(@Size(max = 100) String name) {}
 
-    record SettingsRequest(@Size(max = 100) String name, @Min(0) int displayIndex, UUID restMediaId) {}
+    /** @param restClock show the time over the rest screen (null keeps the current choice) */
+    record SettingsRequest(@Size(max = 100) String name, @Min(0) int displayIndex, UUID restMediaId, Boolean restClock) {}
 
     @ExceptionHandler(DeviceService.DeviceNotFoundException.class)
     ProblemDetail notFound(RuntimeException e) {

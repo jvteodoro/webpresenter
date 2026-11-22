@@ -107,7 +107,21 @@ class EventController {
                 yield planning.addScene(id, request.sceneTitle(), request.sceneStarts(), request.sceneEnds(),
                         request.position());
             }
+            case CLOCK -> planning.addClock(id, request.label(), request.position());
+            case TIMER -> {
+                if (request.timer() == null) {
+                    throw new PlanningService.InvalidRequestException("timer settings are required for timers");
+                }
+                yield planning.addTimer(id, request.label(), request.timer(), request.position());
+            }
         });
+    }
+
+    /** Label of a clock or timer and, for timers, their settings. */
+    @PutMapping("/{id}/items/{itemId}/clock")
+    @PreAuthorize(CAN_EDIT)
+    EventDetail editClockOrTimer(@PathVariable UUID id, @PathVariable UUID itemId, @Valid @RequestBody ClockRequest request) {
+        return detail(planning.editClockOrTimer(id, itemId, request.label(), request.timer()));
     }
 
     @PutMapping("/{id}/items/{itemId}/scene")
@@ -175,12 +189,20 @@ class EventController {
                 MediaView media = catalog.find(i.mediaId())
                         .map(m -> new MediaView(m.id(), m.title(), m.kind(), m.durationMs()))
                         .orElse(new MediaView(i.mediaId(), "(mídia removida)", null, null));
-                yield new ItemView(i.id(), i.type(), media.title(), media, null, null, null, background(i.background()));
+                yield new ItemView(i.id(), i.type(), media.title(), media, null, null, null, background(i.background()), null, null);
             }
             case SLIDE -> new ItemView(i.id(), i.type(), i.slideTitle(), null, new SlideView(i.slideTitle(), i.slideBody()),
-                    null, null, background(i.background()));
+                    null, null, background(i.background()), null, null);
             case SCENE -> new ItemView(i.id(), i.type(), i.sceneTitle(), null, null, null,
-                    new SceneView(i.sceneTitle(), i.sceneStarts(), i.sceneEnds()), background(i.background()));
+                    new SceneView(i.sceneTitle(), i.sceneStarts(), i.sceneEnds()), background(i.background()), null, null);
+            case CLOCK -> new ItemView(i.id(), i.type(), i.label() == null ? "Relógio" : i.label(), null, null, null, null,
+                    background(i.background()), i.label(), null);
+            case TIMER -> new ItemView(i.id(), i.type(), i.label() == null ? "Cronômetro" : i.label(), null, null, null,
+                    null, background(i.background()), i.label(), new TimerView(i.timerMode(), i.timerTime(),
+                            i.timerDurationSeconds(), planning.signals(i.timerSignals()).stream()
+                                    .map(sig -> new SignalView(sig.beforeEndSeconds(), sig.soundMediaId(),
+                                            catalog.find(sig.soundMediaId()).map(m -> m.title()).orElse("(som removido)")))
+                                    .toList()));
             case SONG -> {
                 SongView song = songs.find(i.songId()).map(plan -> {
                     var recording = i.recordingId() == null ? null : plan.recording(i.recordingId()).orElse(null);
@@ -193,7 +215,7 @@ class EventController {
                                             r.cueStartMs().stream().anyMatch(java.util.Objects::nonNull)))
                                     .toList());
                 }).orElse(new SongView(i.songId(), "(música removida)", 0, null, null, false, null, List.of()));
-                yield new ItemView(i.id(), i.type(), song.title(), null, null, song, null, background(i.background()));
+                yield new ItemView(i.id(), i.type(), song.title(), null, null, song, null, background(i.background()), null, null);
             }
         }).toList();
         return new EventDetail(event.id(), event.title(), event.startsAt(), event.current(), items,
@@ -210,7 +232,15 @@ class EventController {
 
     record NewItemRequest(@NotNull ItemType type, UUID mediaId, @Size(max = 200) String slideTitle,
             @Size(max = 4000) String slideBody, UUID songId, UUID recordingId, @Size(max = 200) String sceneTitle,
-            java.time.LocalTime sceneStarts, java.time.LocalTime sceneEnds, Integer position) {}
+            java.time.LocalTime sceneStarts, java.time.LocalTime sceneEnds, @Size(max = 200) String label,
+            TimerSettings timer, Integer position) {}
+
+    record ClockRequest(@Size(max = 200) String label, TimerSettings timer) {}
+
+    record TimerView(TimerSettings.Mode mode, java.time.LocalTime time, Integer durationSeconds, List<SignalView> signals) {}
+
+    /** @param sound title of the sound */
+    record SignalView(int beforeEndSeconds, UUID soundMediaId, String sound) {}
 
     record SceneRequest(@NotBlank @Size(max = 200) String title, java.time.LocalTime starts, java.time.LocalTime ends) {}
 
@@ -239,7 +269,7 @@ class EventController {
 
     /** @param background the item's (or scene's) own background music, or null (inherited) */
     record ItemView(UUID id, ItemType type, String title, MediaView media, SlideView slide, SongView song,
-            SceneView scene, BackgroundView background) {}
+            SceneView scene, BackgroundView background, String label, TimerView timer) {}
 
     /** A song item: chosen recording (null: lyrics only) and the recordings available. */
     record SongView(UUID id, String title, int slideCount, UUID recordingId, String recordingKind, boolean timed,

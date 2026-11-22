@@ -17,6 +17,8 @@ import { EventDetail, EventInput, EventItem, Readiness, SceneInput, SlideInput }
 import { BackgroundView } from '../../../core/audio/background';
 import { BackgroundChoice, BackgroundPickerData, BackgroundPickerDialog } from '../../audio/background-picker-dialog';
 import { SceneDialog } from '../dialogs/scene-dialog';
+import { TimerDialog, TimerDialogData, TimerDialogResult } from '../dialogs/timer-dialog';
+import { TextPromptDialog, TextPromptDialogData } from '../../../shared/dialogs/text-prompt-dialog';
 import { EventsApi } from '../../../core/events/events-api';
 import { MEDIA_KIND_ICONS } from '../../../core/media/media';
 import { ConfirmDialog, ConfirmDialogData } from '../../../shared/dialogs/confirm-dialog';
@@ -104,9 +106,29 @@ export class EventEditorPage {
     return s && e ? `${s}–${e}` : s ? `a partir de ${s}` : e ? `até ${e}` : '';
   }
 
+  /** "Até o fim da cena · 2 sinais", "Até 10:10", "5:00 a partir do início". */
+  protected timerText(item: EventItem): string {
+    const t = item.timer;
+    if (!t) {
+      return '';
+    }
+    const target =
+      t.mode === 'SCENE_END' ? 'Até o fim da cena'
+        : t.mode === 'TIME' ? `Até ${t.time?.slice(0, 5)}`
+          : `${Math.floor((t.durationSeconds ?? 0) / 60)}:${String((t.durationSeconds ?? 0) % 60).padStart(2, '0')} a partir do início`;
+    const n = t.signals.length;
+    return n ? `${target} · ${n} ${n === 1 ? 'sinal' : 'sinais'}` : target;
+  }
+
   protected icon(item: EventItem): string {
     if (item.type === 'SCENE') {
       return 'segment';
+    }
+    if (item.type === 'CLOCK') {
+      return 'schedule';
+    }
+    if (item.type === 'TIMER') {
+      return 'timer';
     }
     if (item.type === 'SONG') {
       return 'queue_music';
@@ -197,6 +219,38 @@ export class EventEditorPage {
       .afterClosed()
       .pipe(filter((slide): slide is SlideInput => !!slide))
       .subscribe((slide) => this.run(this.api.editSlide(this.id(), item.id, slide), 'editar slide'));
+  }
+
+  protected addClock(): void {
+    this.run(this.api.addClock(this.id(), null), 'adicionar relógio');
+  }
+
+  protected addTimer(): void {
+    this.openTimer(null, (r) => this.api.addTimer(this.id(), r.label, r.timer), 'adicionar cronômetro');
+  }
+
+  protected editClock(item: EventItem): void {
+    if (item.type === 'TIMER') {
+      this.openTimer(item, (r) => this.api.editClock(this.id(), item.id, r.label, r.timer), 'editar cronômetro');
+      return;
+    }
+    this.dialog
+      .open<TextPromptDialog, TextPromptDialogData, string>(TextPromptDialog, {
+        data: { title: 'Texto acima do relógio', label: 'Texto', value: item.label ?? 'Relógio', maxLength: 200 },
+      })
+      .afterClosed()
+      .pipe(filter((label): label is string => !!label))
+      .subscribe((label) => this.run(this.api.editClock(this.id(), item.id, label, null), 'editar relógio'));
+  }
+
+  private openTimer(item: EventItem | null, save: (r: TimerDialogResult) => Observable<EventDetail>, what: string): void {
+    this.dialog
+      .open<TimerDialog, TimerDialogData, TimerDialogResult>(TimerDialog, {
+        data: { label: item?.label ?? null, timer: item?.timer ?? null },
+      })
+      .afterClosed()
+      .pipe(filter((r): r is TimerDialogResult => !!r))
+      .subscribe((r) => this.run(save(r), what));
   }
 
   protected addScene(): void {

@@ -20,11 +20,14 @@ class PlanningService implements PlannedEvents, MediaUsage {
     private final SongCatalog songs;
     private final ApplicationEventPublisher events;
     private final webpresenter.server.playlists.PlaylistCatalog playlists;
+    private final tools.jackson.databind.json.JsonMapper json;
     private final Clock clock = Clock.systemUTC();
 
     PlanningService(PlannedEventRepository repository, MediaCatalog catalog, SongCatalog songs,
-            ApplicationEventPublisher events, webpresenter.server.playlists.PlaylistCatalog playlists) {
+            ApplicationEventPublisher events, webpresenter.server.playlists.PlaylistCatalog playlists,
+            tools.jackson.databind.json.JsonMapper json) {
         this.playlists = playlists;
+        this.json = json;
         this.repository = repository;
         this.catalog = catalog;
         this.songs = songs;
@@ -165,11 +168,11 @@ class PlanningService implements PlannedEvents, MediaUsage {
     @Override
     @Transactional(readOnly = true)
     public Optional<EventPlan> current() {
-        return repository.findByCurrentTrue().map(PlanningService::plan);
+        return repository.findByCurrentTrue().map(this::plan);
     }
 
     /** Items without the scene markers, each with its scene and effective background (item → scene → event). */
-    static EventPlan plan(PlannedEvent e) {
+    EventPlan plan(PlannedEvent e) {
         List<EventPlan.Item> items = new java.util.ArrayList<>();
         EventItem scene = null;
         for (EventItem i : e.items()) {
@@ -179,12 +182,88 @@ class PlanningService implements PlannedEvents, MediaUsage {
             }
             var background = i.background() != null ? i.background()
                     : scene != null && scene.background() != null ? scene.background() : e.background();
+            EventPlan.Timer timer = null;
+            if (i.type() == ItemType.TIMER) {
+                var target = switch (i.timerMode()) {
+                    case TIME -> i.timerTime();
+                    case SCENE_END -> scene == null ? null : scene.sceneEnds();
+                    case DURATION -> null;
+                };
+                timer = new EventPlan.Timer(target, i.timerDurationSeconds(), signals(i.timerSignals()));
+            }
             items.add(new EventPlan.Item(i.id(), i.type(), i.mediaId(), i.slideTitle(), i.slideBody(), i.songId(),
                     i.recordingId(), scene == null ? null
                             : new EventPlan.Scene(scene.id(), scene.sceneTitle(), scene.sceneStarts(), scene.sceneEnds()),
-                    background));
+                    background, i.label(), timer));
         }
         return new EventPlan(e.id(), e.title(), items, e.background());
+    }
+
+    @Transactional
+    PlannedEvent addClock(UUID id, String label, Integer position) {
+        PlannedEvent event = find(id);
+        event.addItem(EventItem.clock(event, blank(label)), position, clock.instant());
+        changed(event);
+        return loaded(event);
+    }
+
+    @Transactional
+    PlannedEvent addTimer(UUID id, String label, TimerSettings settings, Integer position) {
+        PlannedEvent event = find(id);
+        event.addItem(EventItem.timer(event, blank(label), settings, signalsJson(settings)), position, clock.instant());
+        changed(event);
+        return loaded(event);
+    }
+
+    /** Label of a clock or timer, and for timers their settings (null keeps them). */
+    @Transactional
+    PlannedEvent editClockOrTimer(UUID id, UUID itemId, String label, TimerSettings settings) {
+        PlannedEvent event = find(id);
+        EventItem item = event.item(itemId);
+        item.editLabel(blank(label));
+        if (settings != null) {
+            item.setTimer(settings, signalsJson(settings));
+        }
+        event.touch(clock.instant());
+        changed(event);
+        return loaded(event);
+    }
+
+    /** Validates the settings and returns the signals as stored (JSON). */
+    private String signalsJson(TimerSettings settings) {
+        if (settings == null || settings.mode() == null) {
+            throw new InvalidRequestException("timer mode is required");
+        }
+        if (settings.mode() == TimerSettings.Mode.TIME && settings.time() == null) {
+            throw new InvalidRequestException("a timer to a time needs the time");
+        }
+        if (settings.mode() == TimerSettings.Mode.DURATION
+                && (settings.durationSeconds() == null || settings.durationSeconds() <= 0 || settings.durationSeconds() > 86_400)) {
+            throw new InvalidRequestException("a timer for a duration needs 1 s to 24 h");
+        }
+        if (settings.signals().size() > 10) {
+            throw new InvalidRequestException("at most 10 signals");
+        }
+        for (TimerSettings.Signal signal : settings.signals()) {
+            if (signal.beforeEndSeconds() < 0 || signal.beforeEndSeconds() > 86_400) {
+                throw new InvalidRequestException("signals are from 0 to 24 h before the end");
+            }
+            var media = catalog.find(signal.soundMediaId() == null ? new UUID(0, 0) : signal.soundMediaId())
+                    .orElseThrow(() -> new InvalidRequestException("sound " + signal.soundMediaId() + " does not exist"));
+            if (media.kind() == webpresenter.server.library.MediaKind.IMAGE) {
+                throw new InvalidRequestException("a signal must be a sound");
+            }
+        }
+        return json.writeValueAsString(settings.signals());
+    }
+
+    List<TimerSettings.Signal> signals(String stored) {
+        return stored == null ? List.of()
+                : List.of(json.readValue(stored, TimerSettings.Signal[].class));
+    }
+
+    private static String blank(String value) {
+        return value == null || value.isBlank() ? null : value.strip();
     }
 
     @Transactional
@@ -241,6 +320,7 @@ class PlanningService implements PlannedEvents, MediaUsage {
     public List<String> usagesOf(UUID mediaId) {
         var events = new java.util.LinkedHashSet<PlannedEvent>(repository.findAllUsingMedia(mediaId));
         events.addAll(repository.findAllWithBackgroundMedia(mediaId));
+        events.addAll(repository.findAllWithSignalSound("[{\"soundMediaId\":\"" + mediaId + "\"}]"));
         return events.stream().map(e -> "evento \"" + e.title() + "\"").toList();
     }
 

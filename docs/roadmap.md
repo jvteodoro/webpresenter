@@ -153,9 +153,18 @@ As implemented (phase C):
   1 min left, end) play a library sound (sound effect or any song/audio) through the *effects*
   channel. Visible on the players' output and in operation mode.
 
+As implemented (phase D): item types `CLOCK` and `TIMER` (label; mode `SCENE_END`, `TIME` or
+`DURATION`; up to 10 signals with a library sound). The plan resolves "end of scene" into a
+local time; players and browsers compute the target in their own local time (the server may run
+in UTC), on the day the item started. Past the target the value turns red and counts up; a
+scene without an end time only counts up. Signals already past when the timer starts do not
+play. Each player has a second audio-only mpv for effects (master × effects). Devices have a
+"clock on the rest screen" option (`Config.restClock`). Verified on a real player: countdown,
+signals at the right moments, overtime, full-screen clock with the date, rest-screen clock.
+
 ## Phases
 
-Status: phases A and C implemented; phase B implemented and tested with a simulated worker (real yt-dlp/Demucs run pending: network); D–E to do.
+Status: phases A, C and D implemented; phase B implemented and tested with a simulated worker (real yt-dlp/Demucs run pending: network); E to do.
 
 | Phase | Content |
 |---|---|

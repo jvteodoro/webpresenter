@@ -12,6 +12,7 @@ import { LiveApi } from '../../core/live/live-api';
 import { LiveStream } from '../../core/live/live-stream';
 import { MEDIA_KIND_ICONS } from '../../core/media/media';
 import { MixerPanel } from '../audio/mixer-panel';
+import { clockText, countdown, timerTarget } from '../../core/live/timer';
 import { DurationPipe } from '../../shared/pipes/duration.pipe';
 
 const STATUS_LABELS = {
@@ -116,9 +117,44 @@ export class LivePage implements OnInit, OnDestroy {
     }
   }
 
+  /** Clock or timer on screen: the value and line below, as the players show them. */
+  protected readonly clockDisplay = computed(() => {
+    const item = this.onScreen();
+    const s = this.state();
+    if (!item || !s) {
+      return null;
+    }
+    const now = this.now();
+    if (item.type === 'CLOCK') {
+      return { value: clockText(now), sub: '', over: false };
+    }
+    if (item.type === 'TIMER' && item.timer) {
+      const started = s.itemStartedAt ? Date.parse(s.itemStartedAt) : now;
+      const target = timerTarget(item.timer, started);
+      if (target === null) {
+        return { value: countdown(-(now - started)).replace('+', ''), sub: 'em andamento', over: false };
+      }
+      const remaining = target - now;
+      return {
+        value: countdown(remaining),
+        sub: remaining < 0 ? 'tempo esgotado'
+          : item.timer.targetTime ? `até ${item.timer.targetTime.slice(0, 5)}`
+            : `de ${countdown(item.timer.durationMs ?? 0)}`,
+        over: remaining < 0,
+      };
+    }
+    return null;
+  });
+
   protected icon(item: LiveItem | null): string {
     if (!item) {
       return 'wallpaper';
+    }
+    if (item.type === 'CLOCK') {
+      return 'schedule';
+    }
+    if (item.type === 'TIMER') {
+      return 'timer';
     }
     if (item.type === 'SONG') {
       return 'queue_music';

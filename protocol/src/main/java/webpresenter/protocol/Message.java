@@ -69,8 +69,15 @@ public sealed interface Message {
      *
      * @param displayIndex index of the display used for the presentation window
      * @param restScreen media shown while nothing is playing, or null for a black screen
+     * @param restClock show the time over the rest screen
      */
-    record Config(String deviceName, int displayIndex, MediaRef restScreen, Transition transition) implements Message {}
+    record Config(String deviceName, int displayIndex, MediaRef restScreen, Transition transition, boolean restClock)
+            implements Message {
+
+        public Config(String deviceName, int displayIndex, MediaRef restScreen, Transition transition) {
+            this(deviceName, displayIndex, restScreen, transition, false);
+        }
+    }
 
     /**
      * The event the player must be ready to present: all its media must be downloaded before it
@@ -171,16 +178,42 @@ public sealed interface Message {
      *     images, songs without audio); null = silence. Items with sound duck or stop it.
      */
     record PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide, SongContent song,
-            BackgroundMusic background) {
+            BackgroundMusic background, TimerContent timer) {
 
         public PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide) {
-            this(itemId, type, title, media, slide, null, null);
+            this(itemId, type, title, media, slide, null, null, null);
         }
 
         public PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide, SongContent song) {
-            this(itemId, type, title, media, slide, song, null);
+            this(itemId, type, title, media, slide, song, null, null);
+        }
+
+        public PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide, SongContent song,
+                BackgroundMusic background) {
+            this(itemId, type, title, media, slide, song, background, null);
+        }
+
+        public PlanItem withBackground(BackgroundMusic music) {
+            return new PlanItem(itemId, type, title, media, slide, song, music, timer);
         }
     }
+
+    /**
+     * What a TIMER counts down to; past it, the timer counts up. Times are the player's local time.
+     *
+     * @param targetTime local time "HH:mm[:ss]" (a fixed time or its scene's end), or null
+     * @param durationMs from when the item starts, or null
+     * @param signals sounds played (effects channel) at marks before the end
+     */
+    record TimerContent(String targetTime, Long durationMs, List<TimerSignal> signals) {
+
+        public TimerContent {
+            signals = signals == null ? List.of() : List.copyOf(signals);
+        }
+    }
+
+    /** @param beforeEndMs 0 = at the end */
+    record TimerSignal(long beforeEndMs, MediaRef sound) {}
 
     /**
      * Music played softly behind items without sound and the rest screen: one track or a playlist,
@@ -224,7 +257,8 @@ public sealed interface Message {
 
     record Slide(String title, String body) {}
 
-    enum ItemType { MEDIA, SLIDE, SONG }
+    /** CLOCK: the time, full screen; TIMER: a countdown ({@link TimerContent}); the title is shown above them. */
+    enum ItemType { MEDIA, SLIDE, SONG, CLOCK, TIMER }
 
     enum PlaybackStatus {
         /** Downloading or opening the item. */

@@ -1,3 +1,4 @@
+import { TimerInfo } from './timer';
 import { MediaKind } from '../media/media';
 import { ItemType } from '../events/event';
 
@@ -24,6 +25,8 @@ export interface LiveItem {
   timed: boolean;
   /** Name of the scene the item belongs to, or null. */
   scene: string | null;
+  /** What a TIMER counts down to. */
+  timer: TimerInfo | null;
 }
 
 export interface LivePlayer {

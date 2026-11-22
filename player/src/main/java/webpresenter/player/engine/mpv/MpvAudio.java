@@ -21,7 +21,13 @@ public final class MpvAudio implements AutoCloseable {
     private final Thread eventThread;
     private volatile boolean running = true;
 
+    /** Background music: loops the list. */
     public MpvAudio() {
+        this(true);
+    }
+
+    /** @param loop repeat the list (background music) or play it once (effects) */
+    public MpvAudio(boolean loop) {
         try {
             Mpv.forceNumericCLocale();
             handle = (MemorySegment) Mpv.create.invokeExact();
@@ -33,7 +39,7 @@ public final class MpvAudio implements AutoCloseable {
             setOption("idle", "yes");
             setOption("audio-display", "no");
             setOption("terminal", "no");
-            setOption("loop-playlist", "inf");
+            setOption("loop-playlist", loop ? "inf" : "no");
             setOption("volume", "0");
             setOption("msg-level", System.getProperty("mpv.msgLevel", "all=warn"));
             Mpv.check((int) Mpv.initialize.invokeExact(handle), "mpv_initialize");

@@ -47,6 +47,9 @@ class Device {
     @Column(name = "rest_media_id")
     private UUID restMediaId;
 
+    @Column(name = "rest_clock", nullable = false)
+    private boolean restClock;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -90,6 +93,10 @@ class Device {
         this.approvedAt = now;
     }
 
+    void showClockAtRest(boolean restClock) {
+        this.restClock = restClock;
+    }
+
     void configure(String name, int displayIndex, UUID restMediaId) {
         this.name = name;
         this.displayIndex = displayIndex;
@@ -114,6 +121,7 @@ class Device {
     String displaysJson() { return displaysJson; }
     int displayIndex() { return displayIndex; }
     UUID restMediaId() { return restMediaId; }
+    boolean restClock() { return restClock; }
     Instant createdAt() { return createdAt; }
     Instant approvedAt() { return approvedAt; }
     String approvedBy() { return approvedBy; }

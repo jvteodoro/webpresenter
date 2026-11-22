@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { EventDetail, EventInput, EventSummary, Readiness, SlideInput, SceneInput, BackgroundSource } from './event';
+import { EventDetail, EventInput, EventSummary, Readiness, SlideInput, SceneInput, BackgroundSource, TimerSettings } from './event';
 
 @Injectable({ providedIn: 'root' })
 export class EventsApi {
@@ -39,6 +39,19 @@ export class EventsApi {
 
   addSong(id: string, songId: string, recordingId: string | null): Observable<EventDetail> {
     return this.http.post<EventDetail>(`${this.baseUrl}/${id}/items`, { type: 'SONG', songId, recordingId });
+  }
+
+  addClock(id: string, label: string | null): Observable<EventDetail> {
+    return this.http.post<EventDetail>(`${this.baseUrl}/${id}/items`, { type: 'CLOCK', label });
+  }
+
+  addTimer(id: string, label: string | null, timer: TimerSettings): Observable<EventDetail> {
+    return this.http.post<EventDetail>(`${this.baseUrl}/${id}/items`, { type: 'TIMER', label, timer });
+  }
+
+  /** Label of a clock or timer and, for timers, their settings. */
+  editClock(id: string, itemId: string, label: string | null, timer: TimerSettings | null): Observable<EventDetail> {
+    return this.http.put<EventDetail>(`${this.baseUrl}/${id}/items/${itemId}/clock`, { label, timer });
   }
 
   addScene(id: string, scene: SceneInput): Observable<EventDetail> {

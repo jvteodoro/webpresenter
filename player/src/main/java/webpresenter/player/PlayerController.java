@@ -52,6 +52,16 @@ final class PlayerController implements ServerConnection.Listener {
     private boolean paired;
     /** Slide of the song on screen (-1: none yet, e.g. during the intro of a timed song). */
     private int songSlide = -1;
+    /** Updates clocks and timers, and fires timer signals. */
+    private final Timeline clockTicker;
+    private final java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+    /** The running timer: when it reaches zero (null: only counts up), and the last tick. */
+    private Instant timerTarget;
+    private Instant timerStart;
+    private Instant lastTick;
+    private Message.Mixer mixer = Message.Mixer.defaults();
+    /** Effects output (timer signals): an audio-only mpv playing each sound once. */
+    private webpresenter.player.engine.mpv.MpvAudio effectsOutput;
     /** Background music; its audio output is created on first use (null if mpv failed). */
     private final BackgroundMusicPlayer music;
     private webpresenter.player.engine.mpv.MpvAudio musicOutput;
@@ -80,6 +90,9 @@ final class PlayerController implements ServerConnection.Listener {
                 return cache.fetch(media);
             }
         }, Platform::runLater);
+        this.clockTicker = new Timeline(new KeyFrame(javafx.util.Duration.millis(250), e -> tick()));
+        clockTicker.setCycleCount(Timeline.INDEFINITE);
+        clockTicker.play();
         window.setOnItemEnded(this::itemEnded);
         window.showInfo("Conectando ao servidor…", null, serverLabel);
     }
@@ -145,8 +158,12 @@ final class PlayerController implements ServerConnection.Listener {
                 updateBackground();
             }
             case Message.Mixer mixer -> {
+                this.mixer = mixer;
                 music.setMixer(mixer);
                 window.setMediaGain(mixer.master() / 100.0 * mixer.media() / 100.0);
+                if (effectsOutput != null) {
+                    effectsOutput.setVolume(effectsVolume());
+                }
             }
             case Message.Play play -> play(play);
             case Message.ShowSlide show -> showSlide(show);
@@ -159,6 +176,7 @@ final class PlayerController implements ServerConnection.Listener {
                 commandSeq++;
                 leaveItem();
                 report(Message.PlaybackStatus.REST, null, null);
+                onStateChanged.run();
             }
             case Message.Revoked revoked -> {
                 paired = false;
@@ -198,6 +216,12 @@ final class PlayerController implements ServerConnection.Listener {
         Message.PlanItem item = found.get();
         if (item.type() == Message.ItemType.SONG) {
             playSong(command, item, seq);
+            return;
+        }
+        if (item.type() == Message.ItemType.CLOCK || item.type() == Message.ItemType.TIMER) {
+            Instant itemStart = (command.startAt() == null ? Instant.now() : command.startAt())
+                    .minusMillis(command.startPositionMs());
+            startAt(command.startAt(), seq, () -> presentClock(item, itemStart));
             return;
         }
         if (item.type() == Message.ItemType.SLIDE) {
@@ -360,6 +384,81 @@ final class PlayerController implements ServerConnection.Listener {
         updateBackground();
     }
 
+    /** A clock or a timer; the ticker keeps its text current and fires the timer's signals. */
+    private void presentClock(Message.PlanItem item, Instant itemStart) {
+        songFollower.stop();
+        positionReporter.stop();
+        songSlide = -1;
+        liveItem = item;
+        paused = false;
+        timerStart = itemStart;
+        timerTarget = item.type() == Message.ItemType.TIMER ? TimerMath.target(item.timer(), itemStart, zone) : null;
+        lastTick = Instant.now(); // signals already past when the timer starts do not play
+        window.showClock(item.title());
+        tick();
+        report(Message.PlaybackStatus.SHOWING, item.itemId(), null);
+        updateBackground();
+    }
+
+    private void tick() {
+        Instant now = Instant.now();
+        window.setRestClockText(TimerMath.clock(now, zone));
+        if (liveItem == null) {
+            return;
+        }
+        if (liveItem.type() == Message.ItemType.CLOCK) {
+            window.setClock(TimerMath.clock(now, zone), TimerMath.date(now, zone), false);
+        } else if (liveItem.type() == Message.ItemType.TIMER) {
+            if (timerTarget == null) {
+                // No target (scene without an end time): counts up from the start.
+                window.setClock(TimerMath.countdown(-java.time.Duration.between(timerStart, now).toMillis())
+                        .replace("+", ""), "em andamento", false);
+            } else {
+                long remaining = java.time.Duration.between(now, timerTarget).toMillis();
+                window.setClock(TimerMath.countdown(remaining), TimerMath.describe(liveItem.timer(), timerTarget, now),
+                        remaining < 0);
+                Instant from = lastTick == null ? now : lastTick;
+                for (Message.TimerSignal signal : TimerMath.due(liveItem.timer().signals(), timerTarget, from, now)) {
+                    playEffect(signal.sound());
+                }
+            }
+        }
+        lastTick = now;
+    }
+
+    /** Plays a sound once on the effects channel (fetching it first if the pre-cache has not). */
+    private void playEffect(Message.MediaRef sound) {
+        Optional<Path> cached = cache.cached(sound);
+        if (cached.isPresent()) {
+            effects(cached.get());
+            return;
+        }
+        Instant requested = Instant.now();
+        cache.fetch(sound).whenComplete((file, error) -> Platform.runLater(() -> {
+            if (error == null && java.time.Duration.between(requested, Instant.now()).toSeconds() < 3) {
+                effects(file); // late signals are skipped
+            }
+        }));
+    }
+
+    private void effects(Path file) {
+        if (effectsOutput == null) {
+            try {
+                effectsOutput = new webpresenter.player.engine.mpv.MpvAudio(false);
+            } catch (RuntimeException | UnsatisfiedLinkError e) {
+                LOG.log(System.Logger.Level.ERROR, "effects unavailable: " + e.getMessage());
+                return;
+            }
+        }
+        effectsOutput.setVolume(effectsVolume());
+        effectsOutput.playlist(List.of(file), false, false);
+        LOG.log(System.Logger.Level.INFO, "timer signal {0}", file.getFileName());
+    }
+
+    private double effectsVolume() {
+        return mixer.master() / 100.0 * mixer.effects() / 100.0 * 100.0;
+    }
+
     /** Runs the action at the scheduled instant (now if it already passed), unless superseded. */
     private void startAt(Instant at, long seq, Runnable action) {
         if (pendingStart != null) {
@@ -495,6 +594,7 @@ final class PlayerController implements ServerConnection.Listener {
 
     private void applyConfig(Message.Config config) {
         paired = true;
+        window.setRestClock(config.restClock());
         window.setTransition(config.transition() == null ? Message.Transition.DEFAULT : config.transition());
         window.moveTo(config.displayIndex());
         Message.MediaRef rest = config.restScreen();
@@ -505,6 +605,7 @@ final class PlayerController implements ServerConnection.Listener {
             if (!window.isPresenting()) {
                 window.showRest(); // hides the information panel: black output
             }
+            onStateChanged.run();
             return;
         }
         if (cache.cached(rest).isEmpty() && !window.isPresenting()) {
@@ -535,7 +636,9 @@ final class PlayerController implements ServerConnection.Listener {
                     case MEDIA -> java.util.stream.Stream.ofNullable(i.media());
                     case SONG -> i.song() == null ? java.util.stream.Stream.<Message.MediaRef>empty()
                             : java.util.stream.Stream.of(i.song().audio(), i.song().background()).filter(java.util.Objects::nonNull);
-                    case SLIDE -> java.util.stream.Stream.<Message.MediaRef>empty();
+                    case SLIDE, CLOCK -> java.util.stream.Stream.<Message.MediaRef>empty();
+                    case TIMER -> i.timer() == null ? java.util.stream.Stream.<Message.MediaRef>empty()
+                            : i.timer().signals().stream().map(Message.TimerSignal::sound).distinct();
                 })
                 .toList();
         // Background music tracks (each once).
@@ -566,9 +669,13 @@ final class PlayerController implements ServerConnection.Listener {
         positionReporter.stop();
         songFollower.stop();
         preCache.close();
+        clockTicker.stop();
         music.stopNow();
         if (musicOutput != null) {
             musicOutput.close();
+        }
+        if (effectsOutput != null) {
+            effectsOutput.close();
         }
     }
 }

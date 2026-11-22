@@ -343,6 +343,16 @@ class LiveService {
     }
 
     private LiveState.Item item(PlannedEvents.EventPlan.Item i, Map<UUID, List<Long>> cues) {
+        if (i.type() == ItemType.CLOCK) {
+            return new LiveState.Item(i.id(), i.type(), i.label() == null ? "Relógio" : i.label(), null, null);
+        }
+        if (i.type() == ItemType.TIMER) {
+            var t = i.timer();
+            return new LiveState.Item(i.id(), i.type(), i.label() == null ? "Cronômetro" : i.label(), null, null)
+                    .withTimer(new LiveState.Timer(t.targetTime() == null ? null : t.targetTime().toString(),
+                            t.durationSeconds() == null ? null : t.durationSeconds() * 1000L,
+                            t.signals().stream().map(sig -> sig.beforeEndSeconds() * 1000L).toList()));
+        }
         if (i.type() == ItemType.SLIDE) {
             return new LiveState.Item(i.id(), i.type(), i.slideTitle(), null, null);
         }

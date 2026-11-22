@@ -11,5 +11,9 @@ public enum ItemType {
      * Not presented: starts a scene, the group of the items after it (until the next scene), with
      * a name, planned times and background music.
      */
-    SCENE
+    SCENE,
+    /** A full-screen clock (local time of the player). */
+    CLOCK,
+    /** A countdown to a target (scene end, a time, or a duration), with sound signals. */
+    TIMER
 }

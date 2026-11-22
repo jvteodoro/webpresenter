@@ -3,7 +3,7 @@ import { MediaKind } from '../media/media';
 import { BackgroundSource, BackgroundView } from '../audio/background';
 
 /** SCENE: a marker grouping the items after it (until the next scene); not presented. */
-export type ItemType = 'MEDIA' | 'SLIDE' | 'SONG' | 'SCENE';
+export type ItemType = 'MEDIA' | 'SLIDE' | 'SONG' | 'SCENE' | 'CLOCK' | 'TIMER';
 
 export interface EventSummary {
   id: string;
@@ -24,6 +24,26 @@ export interface EventItem {
   scene: SceneInfo | null;
   /** The item's (or scene's) own background music; null inherits. */
   background: BackgroundView | null;
+  /** Shown above a clock or timer. */
+  label: string | null;
+  timer: TimerView | null;
+}
+
+export type TimerMode = 'SCENE_END' | 'TIME' | 'DURATION';
+
+export interface TimerSettings {
+  mode: TimerMode;
+  /** "HH:mm" for TIME. */
+  time: string | null;
+  durationSeconds: number | null;
+  signals: { beforeEndSeconds: number; soundMediaId: string }[];
+}
+
+export interface TimerView {
+  mode: TimerMode;
+  time: string | null;
+  durationSeconds: number | null;
+  signals: { beforeEndSeconds: number; soundMediaId: string; sound: string }[];
 }
 
 export interface SceneInfo {

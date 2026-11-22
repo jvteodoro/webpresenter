@@ -17,6 +17,15 @@ import webpresenter.server.planning.ItemType;
 public record LiveState(UUID eventId, String title, List<Item> items, int currentIndex, int currentSlide,
         Status status, Instant itemStartedAt, List<Player> players, long version) {
 
+    /**
+     * A timer's target, computed in local time by each client (and player).
+     *
+     * @param targetTime "HH:mm:ss" local time, or null
+     * @param durationMs from {@code itemStartedAt}, or null; neither: it only counts up
+     * @param signalsBeforeEndMs marks at which a sound plays
+     */
+    public record Timer(String targetTime, Long durationMs, List<Long> signalsBeforeEndMs) {}
+
     public enum Status {
         /** Rest screen on the outputs. */
         REST,
@@ -32,21 +41,26 @@ public record LiveState(UUID eventId, String title, List<Item> items, int curren
      * @param hasAudio a SONG item presented with one of its recordings
      * @param timed that recording has cues, so slides advance by themselves
      * @param scene name of the scene the item belongs to, or null
+     * @param timer what a TIMER counts down to (null for other items)
      */
     public record Item(UUID id, ItemType type, String title, MediaKind kind, Long durationMs, List<Slide> slides,
-            boolean hasAudio, boolean timed, String scene) {
+            boolean hasAudio, boolean timed, String scene, Timer timer) {
 
         public Item(UUID id, ItemType type, String title, MediaKind kind, Long durationMs) {
-            this(id, type, title, kind, durationMs, List.of(), false, false, null);
+            this(id, type, title, kind, durationMs, List.of(), false, false, null, null);
         }
 
         public Item(UUID id, ItemType type, String title, MediaKind kind, Long durationMs, List<Slide> slides,
                 boolean hasAudio, boolean timed) {
-            this(id, type, title, kind, durationMs, slides, hasAudio, timed, null);
+            this(id, type, title, kind, durationMs, slides, hasAudio, timed, null, null);
         }
 
         Item inScene(String scene) {
-            return new Item(id, type, title, kind, durationMs, slides, hasAudio, timed, scene);
+            return new Item(id, type, title, kind, durationMs, slides, hasAudio, timed, scene, timer);
+        }
+
+        Item withTimer(Timer timer) {
+            return new Item(id, type, title, kind, durationMs, slides, hasAudio, timed, scene, timer);
         }
 
         boolean timeBased() {

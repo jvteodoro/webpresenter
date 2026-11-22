@@ -94,6 +94,11 @@
           <button mat-stroked-button (click)="addMedia()" [disabled]="saving()"><mat-icon>video_library</mat-icon>Adicionar mídia</button>
           <button mat-stroked-button (click)="addSlide()" [disabled]="saving()"><mat-icon>text_fields</mat-icon>Adicionar slide</button>
           <button mat-stroked-button (click)="addScene()" [disabled]="saving()"><mat-icon>segment</mat-icon>Adicionar cena</button>
+          <button mat-stroked-button [matMenuTriggerFor]="clockMenu" [disabled]="saving()"><mat-icon>timer</mat-icon>Relógio ou cronômetro</button>
+          <mat-menu #clockMenu="matMenu">
+            <button mat-menu-item (click)="addClock()"><mat-icon>schedule</mat-icon>Relógio</button>
+            <button mat-menu-item (click)="addTimer()"><mat-icon>timer</mat-icon>Cronômetro</button>
+          </mat-menu>
         </div>
       }
     </div>
@@ -120,6 +125,9 @@
               @if (item.song) {
                 <span class="item-sub">{{ songMode(item) }} · {{ item.song.slideCount }} slides</span>
               }
+              @if (item.type === 'TIMER') {
+                <span class="item-sub">{{ timerText(item) }}</span>
+              }
               @if (item.type === 'SCENE' && sceneTimes(item)) {
                 <span class="item-sub">{{ sceneTimes(item) }}</span>
               }
@@ -129,6 +137,8 @@
             </span>
             <span class="item-meta">
               @if (item.type === 'SCENE') { Cena }
+              @else if (item.type === 'CLOCK') { Relógio }
+              @else if (item.type === 'TIMER') { Cronômetro }
               @else if (item.type === 'SLIDE') { Slide }
               @else if (item.type === 'SONG') { {{ item.song?.durationMs | duration }} }
               @else { {{ item.media?.durationMs | duration }} }
@@ -154,6 +164,11 @@
                 }
                 @if (item.type === 'SLIDE') {
                   <button mat-icon-button aria-label="Editar slide" matTooltip="Editar slide" [disabled]="saving()" (click)="editSlide(item)">
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                }
+                @if (item.type === 'CLOCK' || item.type === 'TIMER') {
+                  <button mat-icon-button [attr.aria-label]="item.type === 'TIMER' ? 'Editar cronômetro' : 'Editar relógio'" matTooltip="Editar" [disabled]="saving()" (click)="editClock(item)">
                     <mat-icon>edit</mat-icon>
                   </button>
                 }

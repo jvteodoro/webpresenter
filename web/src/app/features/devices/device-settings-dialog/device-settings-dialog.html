@@ -28,6 +28,9 @@
         </mat-select>
         <mat-hint>Imagem ou vídeo exibido quando nada está sendo apresentado</mat-hint>
       </mat-form-field>
+      <mat-slide-toggle name="restClock" [ngModel]="restClock()" (ngModelChange)="restClock.set($event)">
+        Mostrar o relógio na tela de descanso
+      </mat-slide-toggle>
     </div>
   </mat-dialog-content>
   <mat-dialog-actions align="end">

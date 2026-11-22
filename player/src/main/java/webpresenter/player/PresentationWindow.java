@@ -65,6 +65,16 @@ final class PresentationWindow {
     private final VBox songText = new VBox(18);
     private final Label slideTitle = label(FontWeight.BOLD, Color.WHITE);
     private final Label slideBody = label(FontWeight.NORMAL, Color.gray(0.92));
+    /** Clock or timer item: label, big value, a line below. */
+    private final StackPane clock = new StackPane();
+    private final Label clockLabel = label(FontWeight.NORMAL, Color.gray(0.85));
+    private final Label clockValue = label(FontWeight.BOLD, Color.WHITE);
+    private final Label clockSub = label(FontWeight.NORMAL, Color.gray(0.7));
+    /** The time over the rest screen (device setting). */
+    private final Label restClock = label(FontWeight.BOLD, Color.WHITE);
+    private boolean restClockEnabled;
+    /** The information panel (connection, pairing) is up: it hides the rest clock. */
+    private boolean infoShown;
     private final VBox info = new VBox(18);
     private final Label infoTitle = label(FontWeight.LIGHT, Color.gray(0.85));
     private final Label infoCode = label(FontWeight.BOLD, Color.WHITE);
@@ -92,7 +102,7 @@ final class PresentationWindow {
     }
 
     /** What is presented on top of the rest screen. */
-    enum ItemKind { NONE, VIDEO, AUDIO, IMAGE, SLIDE, SONG }
+    enum ItemKind { NONE, VIDEO, AUDIO, IMAGE, SLIDE, SONG, CLOCK }
 
     private record Item(ItemKind kind, Path file, long startMs) {
         static final Item NONE = new Item(ItemKind.NONE, null, 0);
@@ -146,7 +156,21 @@ final class PresentationWindow {
         info.setPadding(new Insets(48));
         info.getChildren().addAll(infoTitle, infoCode, infoDetail);
 
-        root.getChildren().addAll(restImage, itemImage, slide, song, info);
+        VBox clockText = new VBox(12, clockLabel, clockValue, clockSub);
+        clockText.setAlignment(Pos.CENTER);
+        clockValue.setStyle("-fx-font-family: 'Monospaced';");
+        clock.getChildren().add(clockText);
+        clock.setBackground(new Background(new BackgroundFill(new LinearGradient(0, 0, 1, 1, true,
+                CycleMethod.NO_CYCLE, new Stop(0, Color.web("#1d2b53")), new Stop(1, Color.web("#0b1020"))), null, null)));
+        clock.setOpacity(0);
+        clock.setVisible(false);
+        javafx.scene.effect.DropShadow clockShadow = new javafx.scene.effect.DropShadow(24, Color.color(0, 0, 0, 0.9));
+        clockShadow.setSpread(0.3);
+        restClock.setEffect(clockShadow);
+        restClock.setOpacity(0);
+        restClock.setMouseTransparent(true);
+
+        root.getChildren().addAll(restImage, itemImage, restClock, slide, song, clock, info);
         // Text scales with the output height, so slides read the same on any display.
         root.heightProperty().addListener((obs, o, h) -> scaleText(h.doubleValue()));
         root.widthProperty().addListener((obs, o, w) -> {
@@ -332,7 +356,55 @@ final class PresentationWindow {
         fadeTo(slide, 1);
         fadeTo(itemImage, 0);
         hideSong();
+        hideClock();
         stopItemMedia();
+    }
+
+    /** A clock or timer item; its texts are set with {@link #setClock}. */
+    void showClock(String label) {
+        enterItem(new Item(ItemKind.CLOCK, null, 0));
+        clockLabel.setText(label == null ? "" : label);
+        clockLabel.setManaged(label != null && !label.isBlank());
+        clock.setVisible(true);
+        fadeTo(clock, 1);
+        fadeTo(itemImage, 0);
+        hideSlide();
+        hideSong();
+        stopItemMedia();
+        updateRestClock();
+    }
+
+    /** @param alert overtime: the value turns red */
+    void setClock(String value, String sub, boolean alert) {
+        clockValue.setText(value);
+        clockValue.setTextFill(alert ? Color.web("#ff6b6b") : Color.WHITE);
+        clockSub.setText(sub == null ? "" : sub);
+        clockSub.setManaged(sub != null && !sub.isBlank());
+    }
+
+    /** Shows the time over the rest screen (device setting). */
+    void setRestClock(boolean enabled) {
+        restClockEnabled = enabled;
+        updateRestClock();
+    }
+
+    void setRestClockText(String text) {
+        restClock.setText(text);
+    }
+
+    private void updateRestClock() {
+        boolean show = restClockEnabled && item.kind() == ItemKind.NONE && !infoShown;
+        fadeTo(restClock, show ? 1 : 0);
+    }
+
+    private void hideClock() {
+        FadeTransition t = fadeTo(clock, 0);
+        t.setOnFinished(e -> {
+            fades.remove(clock, t);
+            if (item.kind() != ItemKind.CLOCK) {
+                clock.setVisible(false);
+            }
+        });
     }
 
     /**
@@ -390,10 +462,12 @@ final class PresentationWindow {
         fadeTo(itemImage, 0);
         hideSlide();
         hideSong();
+        hideClock();
         stopItemMedia();
         if (!isPresenting()) {
             hideInfo();
         }
+        updateRestClock();
     }
 
     void setItemPaused(boolean paused) {
@@ -413,6 +487,8 @@ final class PresentationWindow {
     private void enterItem(Item next) {
         item = next;
         hideInfo();
+        hideClock();
+        updateRestClock();
     }
 
     private void itemMediaEnded() {
@@ -497,9 +573,13 @@ final class PresentationWindow {
         infoDetail.setText(detail == null ? "" : detail);
         info.setVisible(true);
         fadeTo(info, 1);
+        infoShown = true;
+        updateRestClock();
     }
 
     private void hideInfo() {
+        infoShown = false;
+        updateRestClock();
         FadeTransition t = fadeTo(info, 0);
         t.setOnFinished(e -> {
             fades.remove(info, t);
@@ -534,6 +614,10 @@ final class PresentationWindow {
         infoTitle.setFont(Font.font("System", FontWeight.LIGHT, Math.max(20, height * 0.06)));
         infoCode.setFont(Font.font("Monospaced", FontWeight.BOLD, Math.max(40, height * 0.16)));
         infoDetail.setFont(Font.font("System", FontWeight.NORMAL, Math.max(14, height * 0.032)));
+        clockLabel.setFont(Font.font("System", FontWeight.NORMAL, Math.max(20, height * 0.06)));
+        clockValue.setFont(Font.font("Monospaced", FontWeight.BOLD, Math.max(60, height * 0.26)));
+        clockSub.setFont(Font.font("System", FontWeight.NORMAL, Math.max(16, height * 0.045)));
+        restClock.setFont(Font.font("System", FontWeight.BOLD, Math.max(48, height * 0.2)));
     }
 
     /** Scales the image to cover the whole output, like CSS object-fit: cover. */

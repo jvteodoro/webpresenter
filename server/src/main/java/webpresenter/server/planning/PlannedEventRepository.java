@@ -22,4 +22,10 @@ interface PlannedEventRepository extends JpaRepository<PlannedEvent, UUID> {
             where (e.background.kind = webpresenter.server.playlists.BackgroundSource.Kind.MEDIA and e.background.ref = :mediaId)
                or (i.background.kind = webpresenter.server.playlists.BackgroundSource.Kind.MEDIA and i.background.ref = :mediaId)""")
     List<PlannedEvent> findAllWithBackgroundMedia(UUID mediaId);
+
+    /** Events with a timer whose signals use this sound ({@code containment}: [{"soundMediaId": "…"}]). */
+    @Query(value = """
+            select distinct e.* from planned_event e join planned_event_item i on i.event_id = e.id
+            where i.timer_signals @> cast(:containment as jsonb)""", nativeQuery = true)
+    List<PlannedEvent> findAllWithSignalSound(String containment);
 }

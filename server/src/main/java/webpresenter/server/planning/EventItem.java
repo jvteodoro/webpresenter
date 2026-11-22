@@ -63,7 +63,54 @@ class EventItem {
     @jakarta.persistence.AttributeOverride(name = "ref", column = @Column(name = "background_ref"))
     private webpresenter.server.playlists.BackgroundSource background;
 
+    /** Shown above a clock or timer. */
+    private String label;
+
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "timer_mode")
+    private TimerSettings.Mode timerMode;
+
+    @Column(name = "timer_time")
+    private java.time.LocalTime timerTime;
+
+    @Column(name = "timer_duration_seconds")
+    private Integer timerDurationSeconds;
+
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(name = "timer_signals")
+    private String timerSignals;
+
     protected EventItem() {}
+
+    static EventItem clock(PlannedEvent event, String label) {
+        EventItem item = new EventItem(event, ItemType.CLOCK);
+        item.label = label;
+        return item;
+    }
+
+    static EventItem timer(PlannedEvent event, String label, TimerSettings settings, String signalsJson) {
+        EventItem item = new EventItem(event, ItemType.TIMER);
+        item.label = label;
+        item.setTimer(settings, signalsJson);
+        return item;
+    }
+
+    void editLabel(String label) {
+        if (type != ItemType.CLOCK && type != ItemType.TIMER) {
+            throw new PlanningService.InvalidRequestException("only clocks and timers have a label");
+        }
+        this.label = label;
+    }
+
+    void setTimer(TimerSettings settings, String signalsJson) {
+        if (type != ItemType.TIMER) {
+            throw new PlanningService.InvalidRequestException("only timers have timer settings");
+        }
+        this.timerMode = settings.mode();
+        this.timerTime = settings.mode() == TimerSettings.Mode.TIME ? settings.time() : null;
+        this.timerDurationSeconds = settings.mode() == TimerSettings.Mode.DURATION ? settings.durationSeconds() : null;
+        this.timerSignals = signalsJson;
+    }
 
     static EventItem scene(PlannedEvent event, String title, java.time.LocalTime starts, java.time.LocalTime ends) {
         EventItem item = new EventItem(event, ItemType.SCENE);
@@ -144,4 +191,9 @@ class EventItem {
     java.time.LocalTime sceneStarts() { return sceneStarts; }
     java.time.LocalTime sceneEnds() { return sceneEnds; }
     webpresenter.server.playlists.BackgroundSource background() { return background; }
+    String label() { return label; }
+    TimerSettings.Mode timerMode() { return timerMode; }
+    java.time.LocalTime timerTime() { return timerTime; }
+    Integer timerDurationSeconds() { return timerDurationSeconds; }
+    String timerSignals() { return timerSignals; }
 }

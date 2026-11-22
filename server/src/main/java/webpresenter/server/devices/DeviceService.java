@@ -181,7 +181,7 @@ class DeviceService implements Players {
     }
 
     @Transactional
-    DeviceView configure(UUID id, String name, int displayIndex, UUID restMediaId) {
+    DeviceView configure(UUID id, String name, int displayIndex, UUID restMediaId, Boolean restClock) {
         Device device = get(id);
         if (device.status() != DeviceStatus.APPROVED) {
             throw new DeviceStateException("approve the device before configuring it");
@@ -198,6 +198,9 @@ class DeviceService implements Players {
             }
         }
         device.configure(nameOr(name, device.name()), displayIndex, restMediaId);
+        if (restClock != null) {
+            device.showClockAtRest(restClock);
+        }
         sessions.send(id, config(device));
         events.publishEvent(new PlayerEvents.PlayerStatusChanged(id));
         return view(device);
@@ -288,7 +291,8 @@ class DeviceService implements Players {
                 .flatMap(catalog::find)
                 .map(this::mediaRef)
                 .orElse(null);
-        return new Message.Config(device.name(), device.displayIndex(), rest, Message.Transition.DEFAULT);
+        return new Message.Config(device.name(), device.displayIndex(), rest, Message.Transition.DEFAULT,
+                device.restClock());
     }
 
     private Message.Prepare prepare() {
@@ -305,8 +309,7 @@ class DeviceService implements Players {
     }
 
     private static Message.PlanItem withBackground(Message.PlanItem item, Message.BackgroundMusic background) {
-        return new Message.PlanItem(item.itemId(), item.type(), item.title(), item.media(), item.slide(), item.song(),
-                background);
+        return item.withBackground(background);
     }
 
     /** The tracks of a source (null or silence: none); resolved once per plan for repeated sources. */
@@ -346,6 +349,22 @@ class DeviceService implements Players {
             return Optional.of(new Message.PlanItem(item.id().toString(), Message.ItemType.SLIDE, item.slideTitle(),
                     null, new Message.Slide(item.slideTitle(), item.slideBody())));
         }
+        if (item.type() == ItemType.CLOCK) {
+            return Optional.of(new Message.PlanItem(item.id().toString(), Message.ItemType.CLOCK, item.label(),
+                    null, null));
+        }
+        if (item.type() == ItemType.TIMER) {
+            var timer = item.timer();
+            var signals = timer.signals().stream()
+                    .map(sig -> catalog.find(sig.soundMediaId())
+                            .map(m -> new Message.TimerSignal(sig.beforeEndSeconds() * 1000L, mediaRef(m))))
+                    .flatMap(Optional::stream)
+                    .toList();
+            return Optional.of(new Message.PlanItem(item.id().toString(), Message.ItemType.TIMER, item.label(), null,
+                    null, null, null, new Message.TimerContent(
+                            timer.targetTime() == null ? null : timer.targetTime().toString(),
+                            timer.durationSeconds() == null ? null : timer.durationSeconds() * 1000L, signals)));
+        }
         return catalog.find(item.mediaId()).map(media -> new Message.PlanItem(item.id().toString(),
                 Message.ItemType.MEDIA, media.title(), mediaRef(media), null));
     }
@@ -364,7 +383,7 @@ class DeviceService implements Players {
                 device.status() == DeviceStatus.PENDING ? device.pairingCode() : null,
                 sessions.isOnline(device.id()), device.playerVersion(), displays(device), device.displayIndex(),
                 rest, sessions.cacheStatus(device.id()).orElse(null), device.lastSeenAt(), device.approvedAt(),
-                device.approvedBy());
+                device.approvedBy(), device.restClock());
     }
 
     private List<Message.DisplayInfo> displays(Device device) {
@@ -386,7 +405,7 @@ class DeviceService implements Players {
 
     record DeviceView(UUID id, String name, String hostname, DeviceStatus status, String pairingCode, boolean online,
             String playerVersion, List<Message.DisplayInfo> displays, int displayIndex, RestScreen restScreen,
-            Message.CacheStatus cacheStatus, Instant lastSeenAt, Instant approvedAt, String approvedBy) {
+            Message.CacheStatus cacheStatus, Instant lastSeenAt, Instant approvedAt, String approvedBy, boolean restClock) {
 
         record RestScreen(UUID mediaId, String title, MediaKind kind) {}
     }

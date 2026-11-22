@@ -28,6 +28,12 @@
         <mat-icon class="now-icon">{{ icon(onScreen()) }}</mat-icon>
         <h2 class="now-title">{{ onScreen()?.title ?? 'Tela de descanso' }}</h2>
       </div>
+      @if (clockDisplay(); as c) {
+        <div class="now-clock" [class.over]="c.over" aria-label="Relógio no telão">
+          <span class="clock-value">{{ c.value }}</span>
+          @if (c.sub) { <span class="clock-sub">{{ c.sub }}</span> }
+        </div>
+      }
       @if (song(); as current) {
         <div class="now-lyrics" aria-label="Letra no telão">
           @if (songSlide(); as sl) {
@@ -128,6 +134,8 @@
               <span class="item-title">{{ item.title }}</span>
               <span class="item-meta">
                 @if (item.type === 'SLIDE') { Slide }
+                @else if (item.type === 'CLOCK') { Relógio }
+                @else if (item.type === 'TIMER') { Cronômetro }
                 @else if (item.type === 'SONG') { Música@if (item.durationMs) { · {{ item.durationMs | duration }} } }
                 @else { {{ item.durationMs | duration }} }
               </span>
