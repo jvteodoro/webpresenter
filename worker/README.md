@@ -14,7 +14,8 @@ uv pip install --python .venv/bin/python -e ".[separation]"
 .venv/bin/webpresenter-worker          # RabbitMQ from deploy/compose.yaml on localhost:5672
 ```
 
-Requirements on the host: `ffmpeg`, and a JavaScript runtime for YouTube (`node`, `deno` or `bun`).
+Requirements on the host: `ffmpeg`, and a JavaScript runtime for YouTube: `deno` (preferred), or a
+recent `node` (yt-dlp rejects Node 20) or `bun`. The image ships Deno.
 Demucs downloads its model (~80 MB) on first use into `TORCH_HOME` (default `~/.cache/torch`).
 It runs on CPU (several minutes per song) or on an NVIDIA GPU when PyTorch has CUDA.
 

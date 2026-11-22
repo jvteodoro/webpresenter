@@ -1,10 +1,14 @@
 # Processing worker (YouTube import with yt-dlp, vocal separation with Demucs on CPU).
+FROM denoland/deno:bin-2.4.5 AS deno
+
 FROM python:3.12.12-slim-trixie
 
-# ffmpeg: conversions and Demucs input; Node.js (20+, from trixie): JavaScript runtime yt-dlp needs for YouTube.
+# ffmpeg: conversions and Demucs input. Deno: the JavaScript runtime yt-dlp uses for YouTube's
+# challenges (Debian's Node.js is too old for it).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg nodejs ca-certificates \
+    && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+COPY --from=deno /deno /usr/local/bin/deno
 
 WORKDIR /app
 # CPU build of PyTorch (no CUDA download); Demucs models are cached in /models (a volume).

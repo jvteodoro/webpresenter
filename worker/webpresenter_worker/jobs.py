@@ -102,23 +102,19 @@ def youtube_import(job: JobRequest, workdir: Path, report: Reporter) -> Result:
         elif d.get("status") == "finished":
             report.progress(88, "Convertendo")
 
-    options = {
-        "outtmpl": str(workdir / "%(id)s.%(ext)s"),
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        "noprogress": True,
-        "progress_hooks": [hook],
-        "js_runtimes": js_runtimes(),
-        "restrictfilenames": True,
-    }
+    # Options built as yt-dlp's command line builds them: its defaults are what keeps working with
+    # YouTube (a hand-made option dict downloaded the page but got 403 on the media).
+    args = ["--no-playlist", "--restrict-filenames", "--quiet", "--no-progress", "--no-warnings",
+            "-o", str(workdir / "%(id)s.%(ext)s")]
+    for runtime in js_runtimes():
+        args += ["--js-runtimes", runtime]
     if video:
-        options["format"] = ("bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/"
-                             "bv*[height<=1080]+ba/b[height<=1080]/b")
-        options["merge_output_format"] = "mp4"
+        args += ["-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b",
+                 "--merge-output-format", "mp4"]
     else:
-        options["format"] = "bestaudio[ext=m4a]/bestaudio/best"
-        options["postprocessors"] = [{"key": "FFmpegExtractAudio", "preferredcodec": "m4a"}]
+        args += ["-f", "bestaudio[ext=m4a]/bestaudio/best", "-x", "--audio-format", "m4a"]
+    options = yt_dlp.parse_options(args).ydl_opts
+    options["progress_hooks"] = [hook]
 
     report.progress(2, "Consultando o link")
     try:
