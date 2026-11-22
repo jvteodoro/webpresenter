@@ -338,32 +338,34 @@ class LiveService {
         eventId = plan.id();
         title = plan.title();
         Map<UUID, List<Long>> cues = new java.util.HashMap<>();
-        items = plan.items().stream().map(i -> {
-            if (i.type() == ItemType.SLIDE) {
-                return new LiveState.Item(i.id(), i.type(), i.slideTitle(), null, null);
-            }
-            if (i.type() == ItemType.SONG) {
-                var song = songs.find(i.songId()).orElse(null);
-                if (song == null) {
-                    return new LiveState.Item(i.id(), i.type(), "(música removida)", null, null);
-                }
-                var recording = i.recordingId() == null ? null : song.recording(i.recordingId()).orElse(null);
-                Long duration = recording == null ? null
-                        : catalog.find(recording.mediaId()).map(MediaFile::durationMs).orElse(null);
-                boolean timed = recording != null && recording.cueStartMs().stream().anyMatch(Objects::nonNull);
-                if (recording != null) {
-                    cues.put(i.id(), recording.cueStartMs());
-                }
-                List<LiveState.Slide> slides = song.slides().stream()
-                        .map(sl -> new LiveState.Slide(sl.partLabel(), sl.lines(), sl.cue(), sl.instrumental()))
-                        .toList();
-                return new LiveState.Item(i.id(), i.type(), song.title(), null, duration, slides, recording != null, timed);
-            }
-            MediaFile media = catalog.find(i.mediaId()).orElse(null);
-            return new LiveState.Item(i.id(), i.type(), media == null ? "(mídia removida)" : media.title(),
-                    media == null ? null : media.kind(), media == null ? null : media.durationMs());
-        }).toList();
+        items = plan.items().stream().map(i -> item(i, cues).inScene(i.scene() == null ? null : i.scene().title())).toList();
         songCues = cues;
+    }
+
+    private LiveState.Item item(PlannedEvents.EventPlan.Item i, Map<UUID, List<Long>> cues) {
+        if (i.type() == ItemType.SLIDE) {
+            return new LiveState.Item(i.id(), i.type(), i.slideTitle(), null, null);
+        }
+        if (i.type() == ItemType.SONG) {
+            var song = songs.find(i.songId()).orElse(null);
+            if (song == null) {
+                return new LiveState.Item(i.id(), i.type(), "(música removida)", null, null);
+            }
+            var recording = i.recordingId() == null ? null : song.recording(i.recordingId()).orElse(null);
+            Long duration = recording == null ? null
+                    : catalog.find(recording.mediaId()).map(MediaFile::durationMs).orElse(null);
+            boolean timed = recording != null && recording.cueStartMs().stream().anyMatch(Objects::nonNull);
+            if (recording != null) {
+                cues.put(i.id(), recording.cueStartMs());
+            }
+            List<LiveState.Slide> slides = song.slides().stream()
+                    .map(sl -> new LiveState.Slide(sl.partLabel(), sl.lines(), sl.cue(), sl.instrumental()))
+                    .toList();
+            return new LiveState.Item(i.id(), i.type(), song.title(), null, duration, slides, recording != null, timed);
+        }
+        MediaFile media = catalog.find(i.mediaId()).orElse(null);
+        return new LiveState.Item(i.id(), i.type(), media == null ? "(mídia removida)" : media.title(),
+                media == null ? null : media.kind(), media == null ? null : media.durationMs());
     }
 
     private int indexOf(UUID itemId) {

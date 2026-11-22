@@ -52,6 +52,9 @@ final class PlayerController implements ServerConnection.Listener {
     private boolean paired;
     /** Slide of the song on screen (-1: none yet, e.g. during the intro of a timed song). */
     private int songSlide = -1;
+    /** Background music; its audio output is created on first use (null if mpv failed). */
+    private final BackgroundMusicPlayer music;
+    private webpresenter.player.engine.mpv.MpvAudio musicOutput;
 
     PlayerController(PresentationWindow window, PlayerIdentity identity, MediaCache cache, String serverLabel,
             Runnable onStateChanged) {
@@ -66,6 +69,17 @@ final class PlayerController implements ServerConnection.Listener {
         positionReporter.setCycleCount(Timeline.INDEFINITE);
         this.songFollower = new Timeline(new KeyFrame(javafx.util.Duration.millis(100), e -> followSong()));
         songFollower.setCycleCount(Timeline.INDEFINITE);
+        this.music = new BackgroundMusicPlayer(new MusicSink(), new FxFader(), new BackgroundMusicPlayer.Tracks() {
+            @Override
+            public Optional<Path> cached(Message.MediaRef media) {
+                return cache.cached(media);
+            }
+
+            @Override
+            public java.util.concurrent.CompletableFuture<Path> fetch(Message.MediaRef media) {
+                return cache.fetch(media);
+            }
+        }, Platform::runLater);
         window.setOnItemEnded(this::itemEnded);
         window.showInfo("Conectando ao servidor…", null, serverLabel);
     }
@@ -123,6 +137,16 @@ final class PlayerController implements ServerConnection.Listener {
                 plan = prepare;
                 LOG.log(System.Logger.Level.INFO, "preparing event {0} ({1} items)", prepare.eventId(), prepare.items().size());
                 updateRequiredMedia();
+                if (liveItem != null) {
+                    // The item on screen may have new background music (same item, refreshed plan).
+                    plan.items().stream().filter(i -> i.itemId().equals(liveItem.itemId())).findFirst()
+                            .ifPresent(i -> liveItem = i);
+                }
+                updateBackground();
+            }
+            case Message.Mixer mixer -> {
+                music.setMixer(mixer);
+                window.setMediaGain(mixer.master() / 100.0 * mixer.media() / 100.0);
             }
             case Message.Play play -> play(play);
             case Message.ShowSlide show -> showSlide(show);
@@ -142,6 +166,7 @@ final class PlayerController implements ServerConnection.Listener {
                 wantedRest = null;
                 plan = Message.Prepare.none();
                 leaveItem();
+                music.stopNow();
                 updateRequiredMedia();
                 window.showInfo("Player removido do servidor", null, revoked.reason());
             }
@@ -183,6 +208,7 @@ final class PlayerController implements ServerConnection.Listener {
                 paused = false;
                 window.showSlide(item.slide().title(), item.slide().body());
                 report(Message.PlaybackStatus.SHOWING, item.itemId(), null);
+                updateBackground();
             });
             return;
         }
@@ -238,6 +264,7 @@ final class PlayerController implements ServerConnection.Listener {
                 int slide = command.slide() == null ? 0 : command.slide();
                 window.showSong(files[1], files[0], files[0] == null ? 0 : command.startPositionMs());
                 songSlide = -1;
+                updateBackground();
                 if (isTimed(song)) {
                     // Slides follow the audio; before the first cue only the background shows (intro).
                     songFollower.playFromStart();
@@ -330,6 +357,7 @@ final class PlayerController implements ServerConnection.Listener {
             report(Message.PlaybackStatus.PLAYING, item.itemId(), null);
             positionReporter.playFromStart();
         }
+        updateBackground();
     }
 
     /** Runs the action at the scheduled instant (now if it already passed), unless superseded. */
@@ -368,6 +396,7 @@ final class PlayerController implements ServerConnection.Listener {
         songFollower.stop();
         songSlide = -1;
         send(new Message.PlaybackState(itemId, Message.PlaybackStatus.ENDED, duration, duration, null));
+        updateBackground();
         onStateChanged.run();
     }
 
@@ -381,6 +410,63 @@ final class PlayerController implements ServerConnection.Listener {
         songFollower.stop();
         songSlide = -1;
         window.showRest();
+        updateBackground();
+    }
+
+    /**
+     * Background music for what is on screen: the rest screen's at rest; an item's own background
+     * otherwise, lowered (or paused) while the item has sound of its own.
+     */
+    private void updateBackground() {
+        if (liveItem == null) {
+            music.want(plan.rest(), false);
+        } else {
+            music.want(liveItem.background(), isTimeBased(liveItem));
+        }
+    }
+
+    /** Background music output: an audio-only mpv, created when first needed. */
+    private final class MusicSink implements BackgroundMusicPlayer.Sink {
+
+        private webpresenter.player.engine.mpv.MpvAudio output() {
+            if (musicOutput == null) {
+                try {
+                    musicOutput = new webpresenter.player.engine.mpv.MpvAudio();
+                } catch (RuntimeException | UnsatisfiedLinkError e) {
+                    LOG.log(System.Logger.Level.ERROR, "background music unavailable: " + e.getMessage());
+                }
+            }
+            return musicOutput;
+        }
+
+        @Override
+        public void playlist(List<Path> files, boolean shuffle, boolean paused) {
+            var out = output();
+            if (out != null) {
+                out.playlist(files, shuffle, paused);
+            }
+        }
+
+        @Override
+        public void setPaused(boolean paused) {
+            if (musicOutput != null) {
+                musicOutput.setPaused(paused);
+            }
+        }
+
+        @Override
+        public void setVolume(double volume) {
+            if (musicOutput != null) {
+                musicOutput.setVolume(volume);
+            }
+        }
+
+        @Override
+        public void stop() {
+            if (musicOutput != null) {
+                musicOutput.stop();
+            }
+        }
     }
 
     private void reportPosition() {
@@ -452,7 +538,17 @@ final class PlayerController implements ServerConnection.Listener {
                     case SLIDE -> java.util.stream.Stream.<Message.MediaRef>empty();
                 })
                 .toList();
-        preCache.require(plan.eventId(), wantedRest, eventMedia);
+        // Background music tracks (each once).
+        List<Message.MediaRef> music = java.util.stream.Stream.concat(
+                        plan.items().stream().map(Message.PlanItem::background), java.util.stream.Stream.of(plan.rest()))
+                .filter(java.util.Objects::nonNull)
+                .flatMap(b -> b.tracks().stream())
+                .collect(java.util.stream.Collectors.toMap(Message.MediaRef::mediaId, m -> m, (a, b) -> a,
+                        java.util.LinkedHashMap::new))
+                .values().stream().filter(m -> eventMedia.stream().noneMatch(e -> e.mediaId().equals(m.mediaId())))
+                .toList();
+        preCache.require(plan.eventId(), wantedRest,
+                java.util.stream.Stream.concat(eventMedia.stream(), music.stream()).toList());
     }
 
     private void send(Message message) {
@@ -470,5 +566,9 @@ final class PlayerController implements ServerConnection.Listener {
         positionReporter.stop();
         songFollower.stop();
         preCache.close();
+        music.stopNow();
+        if (musicOutput != null) {
+            musicOutput.close();
+        }
     }
 }

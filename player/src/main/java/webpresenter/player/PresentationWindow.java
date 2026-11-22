@@ -71,6 +71,7 @@ final class PresentationWindow {
     private final Label infoDetail = label(FontWeight.NORMAL, Color.gray(0.6));
     private final Map<Node, FadeTransition> fades = new HashMap<>();
     private final DoubleProperty itemVolume = new SimpleDoubleProperty(0);
+    private double mediaGain = 1;
 
     private VideoEngine restEngine;
     private VideoEngine itemEngine;
@@ -154,11 +155,7 @@ final class PresentationWindow {
             song.setPadding(margins);
         });
 
-        itemVolume.addListener((obs, o, v) -> {
-            if (itemEngine != null) {
-                itemEngine.setVolume(v.doubleValue());
-            }
-        });
+        itemVolume.addListener((obs, o, v) -> applyItemVolume());
 
         Scene scene = new Scene(root, 1280, 720, Color.BLACK);
         scene.setCursor(windowed ? Cursor.DEFAULT : Cursor.NONE);
@@ -221,7 +218,7 @@ final class PresentationWindow {
         restEngine = new MpvEngine(width, height);
         restEngine.setVolume(0); // rest screens are visual only
         itemEngine = new MpvEngine(width, height);
-        itemEngine.setVolume(itemVolume.get());
+        applyItemVolume();
         itemEngine.onEndOfMedia(() -> javafx.application.Platform.runLater(this::itemMediaEnded));
         restVideo = bindFit(restEngine.view());
         itemVideo = bindFit(itemEngine.view());
@@ -463,6 +460,18 @@ final class PresentationWindow {
                 slide.setVisible(false);
             }
         });
+    }
+
+    /** Media channel of the mixer (master × media, 0..1): scales videos, audio files and songs. */
+    void setMediaGain(double gain) {
+        mediaGain = Math.clamp(gain, 0, 1);
+        applyItemVolume();
+    }
+
+    private void applyItemVolume() {
+        if (itemEngine != null) {
+            itemEngine.setVolume(itemVolume.get() * mediaGain);
+        }
     }
 
     private void rampVolume(double target) {

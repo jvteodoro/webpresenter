@@ -15,4 +15,11 @@ interface PlannedEventRepository extends JpaRepository<PlannedEvent, UUID> {
 
     @Query("select distinct i.event from EventItem i where i.mediaId = :mediaId")
     List<PlannedEvent> findAllUsingMedia(UUID mediaId);
+
+    /** Events whose background music (of the event, a scene or an item) is this library track. */
+    @Query("""
+            select distinct e from PlannedEvent e left join e.items i
+            where (e.background.kind = webpresenter.server.playlists.BackgroundSource.Kind.MEDIA and e.background.ref = :mediaId)
+               or (i.background.kind = webpresenter.server.playlists.BackgroundSource.Kind.MEDIA and i.background.ref = :mediaId)""")
+    List<PlannedEvent> findAllWithBackgroundMedia(UUID mediaId);
 }

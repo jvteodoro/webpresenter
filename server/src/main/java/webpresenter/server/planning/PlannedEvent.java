@@ -50,6 +50,12 @@ class PlannedEvent {
     @Version
     private long version;
 
+    /** Background music of the event; null inherits the platform's. */
+    @jakarta.persistence.Embedded
+    @jakarta.persistence.AttributeOverride(name = "kind", column = @Column(name = "background_kind"))
+    @jakarta.persistence.AttributeOverride(name = "ref", column = @Column(name = "background_ref"))
+    private webpresenter.server.playlists.BackgroundSource background;
+
     protected PlannedEvent() {}
 
     PlannedEvent(String title, Instant startsAt, String createdBy, Instant now) {
@@ -98,6 +104,11 @@ class PlannedEvent {
         touch(now);
     }
 
+    void setBackground(webpresenter.server.playlists.BackgroundSource background, Instant now) {
+        this.background = background;
+        touch(now);
+    }
+
     void markCurrent(boolean current) {
         this.current = current;
     }
@@ -124,4 +135,5 @@ class PlannedEvent {
     Instant createdAt() { return createdAt; }
     String createdBy() { return createdBy; }
     Instant updatedAt() { return updatedAt; }
+    webpresenter.server.playlists.BackgroundSource background() { return background; }
 }

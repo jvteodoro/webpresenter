@@ -110,6 +110,11 @@ export const routes: Routes = [
     ],
   },
   {
+    path: 'configuracoes',
+    title: 'Configurações · webpresenter',
+    loadComponent: () => import('./features/settings/settings-page').then((m) => m.SettingsPage),
+  },
+  {
     path: 'fila',
     title: 'Fila · webpresenter',
     loadComponent: () => import('./features/jobs/jobs-page').then((m) => m.JobsPage),

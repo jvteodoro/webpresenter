@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { EventDetail, EventInput, EventSummary, Readiness, SlideInput } from './event';
+import { EventDetail, EventInput, EventSummary, Readiness, SlideInput, SceneInput, BackgroundSource } from './event';
 
 @Injectable({ providedIn: 'root' })
 export class EventsApi {
@@ -39,6 +39,29 @@ export class EventsApi {
 
   addSong(id: string, songId: string, recordingId: string | null): Observable<EventDetail> {
     return this.http.post<EventDetail>(`${this.baseUrl}/${id}/items`, { type: 'SONG', songId, recordingId });
+  }
+
+  addScene(id: string, scene: SceneInput): Observable<EventDetail> {
+    return this.http.post<EventDetail>(`${this.baseUrl}/${id}/items`, {
+      type: 'SCENE',
+      sceneTitle: scene.title,
+      sceneStarts: scene.starts,
+      sceneEnds: scene.ends,
+    });
+  }
+
+  editScene(id: string, itemId: string, scene: SceneInput): Observable<EventDetail> {
+    return this.http.put<EventDetail>(`${this.baseUrl}/${id}/items/${itemId}/scene`, scene);
+  }
+
+  /** Background music of an item or scene (null: inherit). */
+  setItemBackground(id: string, itemId: string, source: BackgroundSource | null): Observable<EventDetail> {
+    return this.http.put<EventDetail>(`${this.baseUrl}/${id}/items/${itemId}/background`, { source });
+  }
+
+  /** Background music of the event (null: the platform's). */
+  setEventBackground(id: string, source: BackgroundSource | null): Observable<EventDetail> {
+    return this.http.put<EventDetail>(`${this.baseUrl}/${id}/background`, { source });
   }
 
   chooseRecording(id: string, itemId: string, recordingId: string | null): Observable<EventDetail> {

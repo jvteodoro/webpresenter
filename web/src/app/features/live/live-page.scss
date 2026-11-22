@@ -401,3 +401,16 @@
     font-size: 0.9rem;
   }
 }
+
+.scene {
+  margin: 0.6rem 0 0.2rem;
+  padding: 0 0.25rem;
+  font: var(--mat-sys-label-large);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mat-sys-primary);
+
+  &:first-child {
+    margin-top: 0;
+  }
+}

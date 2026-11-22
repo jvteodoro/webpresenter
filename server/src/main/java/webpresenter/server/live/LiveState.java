@@ -31,12 +31,22 @@ public record LiveState(UUID eventId, String title, List<Item> items, int curren
      * @param slides lyrics slides of a SONG item (empty otherwise)
      * @param hasAudio a SONG item presented with one of its recordings
      * @param timed that recording has cues, so slides advance by themselves
+     * @param scene name of the scene the item belongs to, or null
      */
     public record Item(UUID id, ItemType type, String title, MediaKind kind, Long durationMs, List<Slide> slides,
-            boolean hasAudio, boolean timed) {
+            boolean hasAudio, boolean timed, String scene) {
 
         public Item(UUID id, ItemType type, String title, MediaKind kind, Long durationMs) {
-            this(id, type, title, kind, durationMs, List.of(), false, false);
+            this(id, type, title, kind, durationMs, List.of(), false, false, null);
+        }
+
+        public Item(UUID id, ItemType type, String title, MediaKind kind, Long durationMs, List<Slide> slides,
+                boolean hasAudio, boolean timed) {
+            this(id, type, title, kind, durationMs, slides, hasAudio, timed, null);
+        }
+
+        Item inScene(String scene) {
+            return new Item(id, type, title, kind, durationMs, slides, hasAudio, timed, scene);
         }
 
         boolean timeBased() {

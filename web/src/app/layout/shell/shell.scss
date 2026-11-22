@@ -46,6 +46,18 @@
   font-size: 0.75rem;
 }
 
+// Medium screens: the mode switch shows only its icons (with tooltips) and the user menu only its icon.
+@media (max-width: 1440px) {
+  .mode-label,
+  .user-name {
+    display: none;
+  }
+
+  .mode mat-icon {
+    margin-right: 0;
+  }
+}
+
 @media (max-width: 600px) {
   .toolbar {
     gap: 0.25rem;

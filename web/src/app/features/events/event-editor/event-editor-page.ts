@@ -13,7 +13,10 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { Router, RouterLink } from '@angular/router';
 import { Observable, concatMap, filter, from, last, switchMap, timer } from 'rxjs';
 import { CurrentUser } from '../../../core/auth/current-user';
-import { EventDetail, EventInput, EventItem, Readiness, SlideInput } from '../../../core/events/event';
+import { EventDetail, EventInput, EventItem, Readiness, SceneInput, SlideInput } from '../../../core/events/event';
+import { BackgroundView } from '../../../core/audio/background';
+import { BackgroundChoice, BackgroundPickerData, BackgroundPickerDialog } from '../../audio/background-picker-dialog';
+import { SceneDialog } from '../dialogs/scene-dialog';
 import { EventsApi } from '../../../core/events/events-api';
 import { MEDIA_KIND_ICONS } from '../../../core/media/media';
 import { ConfirmDialog, ConfirmDialogData } from '../../../shared/dialogs/confirm-dialog';
@@ -87,7 +90,24 @@ export class EventEditorPage {
 
   // ------------------------------------------------------------------ display helpers
 
+  /** Position among presented items (scenes are not numbered). */
+  protected readonly positions = computed(() => {
+    let n = 0;
+    return new Map((this.event()?.items ?? []).map((i) => [i.id, i.type === 'SCENE' ? 0 : ++n]));
+  });
+  protected readonly presentedCount = computed(() => (this.event()?.items ?? []).filter((i) => i.type !== 'SCENE').length);
+
+  /** "9:30–10:10" or "a partir de 9:30". */
+  protected sceneTimes(item: EventItem): string {
+    const s = item.scene?.starts?.slice(0, 5);
+    const e = item.scene?.ends?.slice(0, 5);
+    return s && e ? `${s}–${e}` : s ? `a partir de ${s}` : e ? `até ${e}` : '';
+  }
+
   protected icon(item: EventItem): string {
+    if (item.type === 'SCENE') {
+      return 'segment';
+    }
     if (item.type === 'SONG') {
       return 'queue_music';
     }
@@ -177,6 +197,58 @@ export class EventEditorPage {
       .afterClosed()
       .pipe(filter((slide): slide is SlideInput => !!slide))
       .subscribe((slide) => this.run(this.api.editSlide(this.id(), item.id, slide), 'editar slide'));
+  }
+
+  protected addScene(): void {
+    this.dialog
+      .open<SceneDialog, SceneInput | null, SceneInput>(SceneDialog, { data: null })
+      .afterClosed()
+      .pipe(filter((scene): scene is SceneInput => !!scene))
+      .subscribe((scene) => this.run(this.api.addScene(this.id(), scene), 'adicionar cena'));
+  }
+
+  protected editScene(item: EventItem): void {
+    this.dialog
+      .open<SceneDialog, SceneInput | null, SceneInput>(SceneDialog, {
+        data: { title: item.scene?.title ?? item.title, starts: item.scene?.starts ?? null, ends: item.scene?.ends ?? null },
+      })
+      .afterClosed()
+      .pipe(filter((scene): scene is SceneInput => !!scene))
+      .subscribe((scene) => this.run(this.api.editScene(this.id(), item.id, scene), 'editar cena'));
+  }
+
+  /** Background music of an item or scene; leaving it empty inherits (scene → event → platform). */
+  protected chooseItemBackground(item: EventItem): void {
+    this.pickBackground(
+      item.type === 'SCENE' ? `Fundo musical da cena "${item.title}"` : `Fundo musical de "${item.title}"`,
+      item.background,
+      item.type === 'SCENE' ? 'Usar o do evento' : 'Usar o da cena (ou do evento)',
+      (source) => this.api.setItemBackground(this.id(), item.id, source),
+    );
+  }
+
+  protected chooseEventBackground(): void {
+    const current = this.event();
+    if (current) {
+      this.pickBackground('Fundo musical do evento', current.background, 'Usar o padrão da plataforma', (source) =>
+        this.api.setEventBackground(current.id, source),
+      );
+    }
+  }
+
+  private pickBackground(
+    title: string,
+    current: BackgroundView | null,
+    inheritLabel: string,
+    save: (source: BackgroundChoice['source']) => Observable<EventDetail>,
+  ): void {
+    this.dialog
+      .open<BackgroundPickerDialog, BackgroundPickerData, BackgroundChoice>(BackgroundPickerDialog, {
+        data: { title, current: current?.source ?? null, inheritLabel },
+      })
+      .afterClosed()
+      .pipe(filter((choice): choice is BackgroundChoice => !!choice))
+      .subscribe((choice) => this.run(save(choice.source), 'trocar o fundo musical'));
   }
 
   protected removeItem(item: EventItem): void {

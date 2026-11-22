@@ -19,10 +19,12 @@ class PlanningService implements PlannedEvents, MediaUsage {
     private final MediaCatalog catalog;
     private final SongCatalog songs;
     private final ApplicationEventPublisher events;
+    private final webpresenter.server.playlists.PlaylistCatalog playlists;
     private final Clock clock = Clock.systemUTC();
 
     PlanningService(PlannedEventRepository repository, MediaCatalog catalog, SongCatalog songs,
-            ApplicationEventPublisher events) {
+            ApplicationEventPublisher events, webpresenter.server.playlists.PlaylistCatalog playlists) {
+        this.playlists = playlists;
         this.repository = repository;
         this.catalog = catalog;
         this.songs = songs;
@@ -163,16 +165,83 @@ class PlanningService implements PlannedEvents, MediaUsage {
     @Override
     @Transactional(readOnly = true)
     public Optional<EventPlan> current() {
-        return repository.findByCurrentTrue().map(e -> new EventPlan(e.id(), e.title(), e.items().stream()
-                .map(i -> new EventPlan.Item(i.id(), i.type(), i.mediaId(), i.slideTitle(), i.slideBody(), i.songId(),
-                        i.recordingId()))
-                .toList()));
+        return repository.findByCurrentTrue().map(PlanningService::plan);
+    }
+
+    /** Items without the scene markers, each with its scene and effective background (item → scene → event). */
+    static EventPlan plan(PlannedEvent e) {
+        List<EventPlan.Item> items = new java.util.ArrayList<>();
+        EventItem scene = null;
+        for (EventItem i : e.items()) {
+            if (i.type() == ItemType.SCENE) {
+                scene = i;
+                continue;
+            }
+            var background = i.background() != null ? i.background()
+                    : scene != null && scene.background() != null ? scene.background() : e.background();
+            items.add(new EventPlan.Item(i.id(), i.type(), i.mediaId(), i.slideTitle(), i.slideBody(), i.songId(),
+                    i.recordingId(), scene == null ? null
+                            : new EventPlan.Scene(scene.id(), scene.sceneTitle(), scene.sceneStarts(), scene.sceneEnds()),
+                    background));
+        }
+        return new EventPlan(e.id(), e.title(), items, e.background());
+    }
+
+    @Transactional
+    PlannedEvent addScene(UUID id, String title, java.time.LocalTime starts, java.time.LocalTime ends, Integer position) {
+        PlannedEvent event = find(id);
+        event.addItem(EventItem.scene(event, title.strip(), starts, ends), position, clock.instant());
+        changed(event);
+        return loaded(event);
+    }
+
+    @Transactional
+    PlannedEvent editScene(UUID id, UUID itemId, String title, java.time.LocalTime starts, java.time.LocalTime ends) {
+        PlannedEvent event = find(id);
+        event.item(itemId).editScene(title.strip(), starts, ends);
+        event.touch(clock.instant());
+        changed(event);
+        return loaded(event);
+    }
+
+    /** Background music of an item or scene; null inherits. */
+    @Transactional
+    PlannedEvent setItemBackground(UUID id, UUID itemId, webpresenter.server.playlists.BackgroundSource background) {
+        PlannedEvent event = find(id);
+        validate(background);
+        event.item(itemId).setBackground(background);
+        event.touch(clock.instant());
+        changed(event);
+        return loaded(event);
+    }
+
+    /** Background music of the event; null inherits the platform's. */
+    @Transactional
+    PlannedEvent setEventBackground(UUID id, webpresenter.server.playlists.BackgroundSource background) {
+        PlannedEvent event = find(id);
+        validate(background);
+        event.setBackground(background, clock.instant());
+        changed(event);
+        return loaded(event);
+    }
+
+    private void validate(webpresenter.server.playlists.BackgroundSource background) {
+        if (background == null) {
+            return;
+        }
+        try {
+            playlists.validate(background);
+        } catch (IllegalArgumentException e) {
+            throw new InvalidRequestException(e.getMessage());
+        }
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<String> usagesOf(UUID mediaId) {
-        return repository.findAllUsingMedia(mediaId).stream().map(e -> "evento \"" + e.title() + "\"").toList();
+        var events = new java.util.LinkedHashSet<PlannedEvent>(repository.findAllUsingMedia(mediaId));
+        events.addAll(repository.findAllWithBackgroundMedia(mediaId));
+        return events.stream().map(e -> "evento \"" + e.title() + "\"").toList();
     }
 
     /** Initializes the lazy item list; views are built after the transaction ends. */

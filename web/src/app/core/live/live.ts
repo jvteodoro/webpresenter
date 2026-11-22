@@ -22,6 +22,8 @@ export interface LiveItem {
   slides: LiveSlide[];
   hasAudio: boolean;
   timed: boolean;
+  /** Name of the scene the item belongs to, or null. */
+  scene: string | null;
 }
 
 export interface LivePlayer {

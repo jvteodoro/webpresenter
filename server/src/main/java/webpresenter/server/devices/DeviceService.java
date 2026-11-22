@@ -40,11 +40,16 @@ class DeviceService implements Players {
     private final SongCatalog songs;
     private final JsonMapper json;
     private final org.springframework.context.ApplicationEventPublisher events;
+    private final webpresenter.server.playlists.PlaylistCatalog playlists;
+    private final webpresenter.server.settings.SystemSettings settings;
     private final Clock clock = Clock.systemUTC();
 
     DeviceService(DeviceRepository repository, PlayerSessions sessions, MediaCatalog catalog,
             PlannedEvents plannedEvents, SongCatalog songs, JsonMapper json,
-            org.springframework.context.ApplicationEventPublisher events) {
+            org.springframework.context.ApplicationEventPublisher events,
+            webpresenter.server.playlists.PlaylistCatalog playlists, webpresenter.server.settings.SystemSettings settings) {
+        this.playlists = playlists;
+        this.settings = settings;
         this.repository = repository;
         this.sessions = sessions;
         this.catalog = catalog;
@@ -94,6 +99,7 @@ class DeviceService implements Players {
             sessions.send(session, new Message.PairingPending(device.pairingCode()));
         } else {
             sessions.send(session, config(device));
+            sessions.send(session, mixer(settings.audio()));
             sessions.send(session, prepare());
             events.publishEvent(new PlayerEvents.PlayerReady(id));
         }
@@ -166,6 +172,7 @@ class DeviceService implements Players {
         repository.flush();
         sessions.send(id, new Message.Paired(token));
         sessions.send(id, config(device));
+        sessions.send(id, mixer(settings.audio()));
         sessions.send(id, prepare());
         events.publishEvent(new PlayerEvents.PlayerReady(id));
         events.publishEvent(new PlayerEvents.PlayerStatusChanged(id));
@@ -217,6 +224,43 @@ class DeviceService implements Players {
         log.info("sent plan for event {} to connected players", event.eventId());
     }
 
+    /** Levels and fades go to every player at once; a new platform background music also changes the plan. */
+    @TransactionalEventListener(fallbackExecution = true)
+    @Transactional(readOnly = true, propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    void onAudioSettingsChanged(webpresenter.server.settings.AudioSettings.Changed changed) {
+        Message.Mixer mixer = mixer(changed.settings());
+        Message.Prepare prepare = changed.backgroundChanged() ? prepare() : null;
+        for (Device device : repository.findAllByStatus(DeviceStatus.APPROVED)) {
+            sessions.send(device.id(), mixer);
+            if (prepare != null) {
+                sessions.send(device.id(), prepare);
+            }
+        }
+    }
+
+    /** A playlist used as background music changed: players need its new tracks. */
+    @TransactionalEventListener(fallbackExecution = true)
+    @Transactional(readOnly = true, propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    void onPlaylistChanged(webpresenter.server.playlists.PlaylistCatalog.PlaylistChanged changed) {
+        if (isPlaylistReferenced(changed.playlistId())) {
+            Message.Prepare prepare = prepare();
+            for (Device device : repository.findAllByStatus(DeviceStatus.APPROVED)) {
+                sessions.send(device.id(), prepare);
+            }
+        }
+    }
+
+    /** True when the current plan or the platform default names this playlist (also when it became empty). */
+    private boolean isPlaylistReferenced(UUID playlistId) {
+        var platform = settings.audio().defaultBackground();
+        if (platform != null && playlistId.equals(platform.ref())) {
+            return true;
+        }
+        return plannedEvents.current().map(plan -> (plan.background() != null && playlistId.equals(plan.background().ref()))
+                || plan.items().stream().anyMatch(i -> i.background() != null && playlistId.equals(i.background().ref())))
+                .orElse(false);
+    }
+
     /** Readiness of approved players for the current event (visible to worship leaders). */
     @Transactional(readOnly = true)
     List<Readiness> readiness() {
@@ -248,12 +292,38 @@ class DeviceService implements Players {
     }
 
     private Message.Prepare prepare() {
+        var platform = settings.audio().defaultBackground();
+        var resolved = new java.util.HashMap<webpresenter.server.playlists.BackgroundSource, Message.BackgroundMusic>();
+        java.util.function.Function<webpresenter.server.playlists.BackgroundSource, Message.BackgroundMusic> music =
+                source -> backgroundMusic(source == null ? platform : source, resolved);
         return plannedEvents.current()
                 .map(plan -> new Message.Prepare(plan.id().toString(), plan.title(), plan.items().stream()
-                        .map(this::planItem)
+                        .map(item -> planItem(item).map(p -> withBackground(p, music.apply(item.background()))))
                         .flatMap(Optional::stream)
-                        .toList()))
-                .orElse(Message.Prepare.none());
+                        .toList(), music.apply(plan.background())))
+                .orElseGet(() -> Message.Prepare.none(music.apply(null)));
+    }
+
+    private static Message.PlanItem withBackground(Message.PlanItem item, Message.BackgroundMusic background) {
+        return new Message.PlanItem(item.itemId(), item.type(), item.title(), item.media(), item.slide(), item.song(),
+                background);
+    }
+
+    /** The tracks of a source (null or silence: none); resolved once per plan for repeated sources. */
+    private Message.BackgroundMusic backgroundMusic(webpresenter.server.playlists.BackgroundSource source,
+            java.util.Map<webpresenter.server.playlists.BackgroundSource, Message.BackgroundMusic> resolved) {
+        if (source == null) {
+            return null;
+        }
+        return resolved.computeIfAbsent(source, s -> playlists.tracks(s).map(tracks -> {
+            var refs = tracks.mediaIds().stream().map(catalog::find).flatMap(Optional::stream).map(this::mediaRef).toList();
+            return refs.isEmpty() ? null : new Message.BackgroundMusic(tracks.key(), refs, tracks.shuffle());
+        }).orElse(null));
+    }
+
+    private static Message.Mixer mixer(webpresenter.server.settings.AudioSettings a) {
+        return new Message.Mixer(a.master(), a.media(), a.background(), a.effects(), a.fadeInMs(), a.fadeOutMs(),
+                a.duckPercent());
     }
 
     private Optional<Message.PlanItem> planItem(PlannedEvents.EventPlan.Item item) {

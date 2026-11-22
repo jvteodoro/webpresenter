@@ -43,6 +43,7 @@ export class UiModeService {
     ];
     if (this.currentUser.canManageDevices()) {
       entries.push({ path: '/dispositivos', label: 'Dispositivos', icon: 'connected_tv' });
+      entries.push({ path: '/configuracoes', label: 'Configurações', icon: 'settings' });
     }
     return entries;
   });

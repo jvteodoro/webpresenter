@@ -38,11 +38,14 @@ class EventController {
     private final PlanningService planning;
     private final MediaCatalog catalog;
     private final SongCatalog songs;
+    private final webpresenter.server.playlists.PlaylistCatalog playlists;
 
-    EventController(PlanningService planning, MediaCatalog catalog, SongCatalog songs) {
+    EventController(PlanningService planning, MediaCatalog catalog, SongCatalog songs,
+            webpresenter.server.playlists.PlaylistCatalog playlists) {
         this.planning = planning;
         this.catalog = catalog;
         this.songs = songs;
+        this.playlists = playlists;
     }
 
     @GetMapping
@@ -97,7 +100,34 @@ class EventController {
                 }
                 yield planning.addSong(id, request.songId(), request.recordingId(), request.position());
             }
+            case SCENE -> {
+                if (request.sceneTitle() == null || request.sceneTitle().isBlank()) {
+                    throw new PlanningService.InvalidRequestException("sceneTitle is required for scenes");
+                }
+                yield planning.addScene(id, request.sceneTitle(), request.sceneStarts(), request.sceneEnds(),
+                        request.position());
+            }
         });
+    }
+
+    @PutMapping("/{id}/items/{itemId}/scene")
+    @PreAuthorize(CAN_EDIT)
+    EventDetail editScene(@PathVariable UUID id, @PathVariable UUID itemId, @Valid @RequestBody SceneRequest request) {
+        return detail(planning.editScene(id, itemId, request.title(), request.starts(), request.ends()));
+    }
+
+    /** Background music of an item or a scene ({@code source} null: inherit). */
+    @PutMapping("/{id}/items/{itemId}/background")
+    @PreAuthorize(CAN_EDIT)
+    EventDetail setItemBackground(@PathVariable UUID id, @PathVariable UUID itemId, @RequestBody BackgroundRequest request) {
+        return detail(planning.setItemBackground(id, itemId, request.source()));
+    }
+
+    /** Background music of the event ({@code source} null: the platform's). */
+    @PutMapping("/{id}/background")
+    @PreAuthorize(CAN_EDIT)
+    EventDetail setEventBackground(@PathVariable UUID id, @RequestBody BackgroundRequest request) {
+        return detail(planning.setEventBackground(id, request.source()));
     }
 
     /** Chooses which recording of the song plays (null: lyrics only). */
@@ -145,9 +175,12 @@ class EventController {
                 MediaView media = catalog.find(i.mediaId())
                         .map(m -> new MediaView(m.id(), m.title(), m.kind(), m.durationMs()))
                         .orElse(new MediaView(i.mediaId(), "(mídia removida)", null, null));
-                yield new ItemView(i.id(), i.type(), media.title(), media, null, null);
+                yield new ItemView(i.id(), i.type(), media.title(), media, null, null, null, background(i.background()));
             }
-            case SLIDE -> new ItemView(i.id(), i.type(), i.slideTitle(), null, new SlideView(i.slideTitle(), i.slideBody()), null);
+            case SLIDE -> new ItemView(i.id(), i.type(), i.slideTitle(), null, new SlideView(i.slideTitle(), i.slideBody()),
+                    null, null, background(i.background()));
+            case SCENE -> new ItemView(i.id(), i.type(), i.sceneTitle(), null, null, null,
+                    new SceneView(i.sceneTitle(), i.sceneStarts(), i.sceneEnds()), background(i.background()));
             case SONG -> {
                 SongView song = songs.find(i.songId()).map(plan -> {
                     var recording = i.recordingId() == null ? null : plan.recording(i.recordingId()).orElse(null);
@@ -160,11 +193,15 @@ class EventController {
                                             r.cueStartMs().stream().anyMatch(java.util.Objects::nonNull)))
                                     .toList());
                 }).orElse(new SongView(i.songId(), "(música removida)", 0, null, null, false, null, List.of()));
-                yield new ItemView(i.id(), i.type(), song.title(), null, null, song);
+                yield new ItemView(i.id(), i.type(), song.title(), null, null, song, null, background(i.background()));
             }
         }).toList();
         return new EventDetail(event.id(), event.title(), event.startsAt(), event.current(), items,
-                event.createdBy(), event.updatedAt());
+                event.createdBy(), event.updatedAt(), background(event.background()));
+    }
+
+    private BackgroundView background(webpresenter.server.playlists.BackgroundSource source) {
+        return source == null ? null : new BackgroundView(source, playlists.describe(source));
     }
 
     // ------------------------------------------------------------------ requests and views
@@ -172,7 +209,17 @@ class EventController {
     record EventRequest(@NotBlank @Size(max = 200) String title, Instant startsAt) {}
 
     record NewItemRequest(@NotNull ItemType type, UUID mediaId, @Size(max = 200) String slideTitle,
-            @Size(max = 4000) String slideBody, UUID songId, UUID recordingId, Integer position) {}
+            @Size(max = 4000) String slideBody, UUID songId, UUID recordingId, @Size(max = 200) String sceneTitle,
+            java.time.LocalTime sceneStarts, java.time.LocalTime sceneEnds, Integer position) {}
+
+    record SceneRequest(@NotBlank @Size(max = 200) String title, java.time.LocalTime starts, java.time.LocalTime ends) {}
+
+    record BackgroundRequest(webpresenter.server.playlists.BackgroundSource source) {}
+
+    /** @param name display name ("Playlist Recepção", a track title, "Silêncio") */
+    record BackgroundView(webpresenter.server.playlists.BackgroundSource source, String name) {}
+
+    record SceneView(String title, java.time.LocalTime starts, java.time.LocalTime ends) {}
 
     record RecordingChoice(UUID recordingId) {}
 
@@ -186,10 +233,13 @@ class EventController {
         }
     }
 
+    /** @param background the event's own background music, or null (platform default) */
     record EventDetail(UUID id, String title, Instant startsAt, boolean current, List<ItemView> items,
-            String createdBy, Instant updatedAt) {}
+            String createdBy, Instant updatedAt, BackgroundView background) {}
 
-    record ItemView(UUID id, ItemType type, String title, MediaView media, SlideView slide, SongView song) {}
+    /** @param background the item's (or scene's) own background music, or null (inherited) */
+    record ItemView(UUID id, ItemType type, String title, MediaView media, SlideView slide, SongView song,
+            SceneView scene, BackgroundView background) {}
 
     /** A song item: chosen recording (null: lyrics only) and the recordings available. */
     record SongView(UUID id, String title, int slideCount, UUID recordingId, String recordingKind, boolean timed,

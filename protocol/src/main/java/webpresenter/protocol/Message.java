@@ -79,14 +79,23 @@ public sealed interface Message {
      * @param eventId null when there is no current event (the player may drop event media)
      * @param items in presentation order
      */
-    record Prepare(String eventId, String title, List<PlanItem> items) implements Message {
+    record Prepare(String eventId, String title, List<PlanItem> items, BackgroundMusic rest) implements Message {
 
         public Prepare {
             items = items == null ? List.of() : List.copyOf(items);
         }
 
+        public Prepare(String eventId, String title, List<PlanItem> items) {
+            this(eventId, title, items, null);
+        }
+
         public static Prepare none() {
-            return new Prepare(null, null, List.of());
+            return new Prepare(null, null, List.of(), null);
+        }
+
+        /** With no current event: only the rest screen's background music (platform default). */
+        public static Prepare none(BackgroundMusic rest) {
+            return new Prepare(null, null, List.of(), rest);
         }
     }
 
@@ -117,6 +126,27 @@ public sealed interface Message {
     /** Resume after {@link Pause}. */
     record Resume() implements Message {}
 
+    /**
+     * Audio levels and fades, the same for every player. Sent after a successful {@link Hello} and
+     * whenever they change (also live, from the operator's mixer).
+     *
+     * @param master overall level 0..100, applied to every channel
+     * @param media videos, audio files and songs 0..100
+     * @param background background music 0..100
+     * @param effects timer signals and other effects 0..100
+     * @param fadeInMs background music fade in (also when it comes back after an item with sound)
+     * @param fadeOutMs background music fade out (also before an item with sound)
+     * @param duckPercent background level while an item with sound plays, in percent of its level;
+     *     0 stops it (fade out, then pause)
+     */
+    record Mixer(int master, int media, int background, int effects, int fadeInMs, int fadeOutMs, int duckPercent)
+            implements Message {
+
+        public static Mixer defaults() {
+            return new Mixer(100, 100, 60, 100, 2000, 1500, 0);
+        }
+    }
+
     /** Stop whatever is presented and show the rest screen. */
     record ShowRest(Transition transition) implements Message {}
 
@@ -136,10 +166,35 @@ public sealed interface Message {
     record MediaRef(String mediaId, MediaKind kind, String url, String sha256, long sizeBytes) {}
 
     /** One step of an event: a media file, a text slide, or a song rendered by the player. */
-    record PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide, SongContent song) {
+    /**
+     * @param background music played while this item shows when it has no sound of its own (slides,
+     *     images, songs without audio); null = silence. Items with sound duck or stop it.
+     */
+    record PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide, SongContent song,
+            BackgroundMusic background) {
 
         public PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide) {
-            this(itemId, type, title, media, slide, null);
+            this(itemId, type, title, media, slide, null, null);
+        }
+
+        public PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide, SongContent song) {
+            this(itemId, type, title, media, slide, song, null);
+        }
+    }
+
+    /**
+     * Music played softly behind items without sound and the rest screen: one track or a playlist,
+     * looped.
+     *
+     * @param key identifies the source ("playlist:&lt;id&gt;", "media:&lt;id&gt;"); when consecutive items
+     *     have the same key the music goes on instead of starting over
+     * @param tracks audio files, downloaded with the rest of the event
+     * @param shuffle play the tracks in random order
+     */
+    record BackgroundMusic(String key, List<MediaRef> tracks, boolean shuffle) {
+
+        public BackgroundMusic {
+            tracks = tracks == null ? List.of() : List.copyOf(tracks);
         }
     }
 

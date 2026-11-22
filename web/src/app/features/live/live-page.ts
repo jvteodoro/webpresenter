@@ -11,6 +11,7 @@ import { LiveAction, LiveItem, LivePlayer, LiveSlide, isTimeBased } from '../../
 import { LiveApi } from '../../core/live/live-api';
 import { LiveStream } from '../../core/live/live-stream';
 import { MEDIA_KIND_ICONS } from '../../core/media/media';
+import { MixerPanel } from '../audio/mixer-panel';
 import { DurationPipe } from '../../shared/pipes/duration.pipe';
 
 const STATUS_LABELS = {
@@ -37,7 +38,7 @@ const PLAYBACK_LABELS: Record<string, string> = {
  */
 @Component({
   selector: 'app-live-page',
-  imports: [RouterLink, MatButtonModule, MatIconModule, MatProgressBarModule, MatTooltipModule, DurationPipe],
+  imports: [RouterLink, MatButtonModule, MatIconModule, MatProgressBarModule, MatTooltipModule, DurationPipe, MixerPanel],
   templateUrl: './live-page.html',
   styleUrl: './live-page.scss',
   host: { '(document:keydown)': 'onKey($event)' },

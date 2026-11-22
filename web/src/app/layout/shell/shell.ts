@@ -5,6 +5,7 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatToolbarModule } from '@angular/material/toolbar';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { CurrentUser } from '../../core/auth/current-user';
 import { UiMode, UiModeService } from '../../core/ui-mode';
@@ -13,7 +14,7 @@ import { JobsStream } from '../../core/jobs/jobs-stream';
 /** Application frame: top bar with navigation and the user menu. */
 @Component({
   selector: 'app-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, MatToolbarModule, MatBadgeModule, MatButtonModule, MatButtonToggleModule, MatIconModule, MatMenuModule],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, MatToolbarModule, MatBadgeModule, MatButtonModule, MatButtonToggleModule, MatIconModule, MatMenuModule, MatTooltipModule],
   templateUrl: './shell.html',
   styleUrl: './shell.scss',
 })

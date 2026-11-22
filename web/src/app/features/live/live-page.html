@@ -111,6 +111,9 @@
       <h2 class="section-title">Ordem do evento</h2>
       <ol class="items">
         @for (item of s.items; track item.id; let i = $index) {
+          @if (item.scene && item.scene !== s.items[i - 1]?.scene) {
+            <li class="scene" aria-hidden="true">{{ item.scene }}</li>
+          }
           <li>
             <button class="item" type="button"
                     [class.current]="i === s.currentIndex && s.status !== 'REST'"
@@ -136,6 +139,13 @@
         }
       </ol>
     </section>
+
+    @if (canControl()) {
+      <section class="card mixer" aria-label="Mixer">
+        <h2 class="section-title">Mixer</h2>
+        <app-mixer-panel [compact]="true" />
+      </section>
+    }
 
     <section class="card players">
       <h2 class="section-title">Players</h2>

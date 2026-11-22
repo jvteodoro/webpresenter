@@ -1,7 +1,9 @@
 import { CacheStatus } from '../devices/device';
 import { MediaKind } from '../media/media';
+import { BackgroundSource, BackgroundView } from '../audio/background';
 
-export type ItemType = 'MEDIA' | 'SLIDE' | 'SONG';
+/** SCENE: a marker grouping the items after it (until the next scene); not presented. */
+export type ItemType = 'MEDIA' | 'SLIDE' | 'SONG' | 'SCENE';
 
 export interface EventSummary {
   id: string;
@@ -19,6 +21,22 @@ export interface EventItem {
   media: { id: string; title: string; kind: MediaKind | null; durationMs: number | null } | null;
   slide: { title: string; body: string } | null;
   song: SongItem | null;
+  scene: SceneInfo | null;
+  /** The item's (or scene's) own background music; null inherits. */
+  background: BackgroundView | null;
+}
+
+export interface SceneInfo {
+  title: string;
+  /** "HH:mm:ss" or null. */
+  starts: string | null;
+  ends: string | null;
+}
+
+export interface SceneInput {
+  title: string;
+  starts: string | null;
+  ends: string | null;
 }
 
 /** A song in an event: the chosen recording (null: lyrics only) and the ones available. */
@@ -41,12 +59,16 @@ export interface EventDetail {
   items: EventItem[];
   createdBy: string;
   updatedAt: string;
+  /** The event's own background music; null uses the platform's. */
+  background: BackgroundView | null;
 }
 
 export interface EventInput {
   title: string;
   startsAt: string | null;
 }
+
+export type { BackgroundSource };
 
 export interface SlideInput {
   slideTitle: string;

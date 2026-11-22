@@ -249,3 +249,24 @@
     display: none;
   }
 }
+
+.item.scene {
+  margin-top: 0.6rem;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+
+  .item-title {
+    font-weight: 600;
+  }
+
+  .kind,
+  .item-sub,
+  .item-meta {
+    color: inherit;
+  }
+}
+
+.background mat-icon,
+.event-background mat-icon {
+  vertical-align: -0.15em;
+}

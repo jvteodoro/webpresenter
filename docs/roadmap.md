@@ -102,6 +102,26 @@ also used by the timer (scene end time) and the operation view.
   *effects* (timer signals) and *master* — set per platform and adjustable live in operation
   mode; changes reach players immediately.
 
+As implemented (phase C):
+
+- Scenes are `SCENE` marker items in the event's list (name, optional start/end time, background
+  music); the items after a marker belong to it until the next one. Markers are not presented:
+  the plan given to players and to the live state leaves them out, and each item carries its
+  scene. The live page groups items under their scene.
+- `BackgroundSource` (module `playlists`): `PLAYLIST`, `MEDIA` or `SILENCE`; null inherits.
+  Planning resolves item → scene → event; devices completes it with the platform default
+  (module `settings`) and expands it into tracks (`BackgroundMusic` in `PREPARE`: a key, the
+  tracks, shuffle). `PREPARE.rest` is the rest screen's (event → platform).
+- `MIXER` message (levels, fades, duck percent) after `HELLO`/approval and on every change.
+  Settings page (`/configuracoes`) for admins and AV technicians; live faders (operation mode)
+  also for worship leaders.
+- Player: an audio-only mpv plays the background in a loop; the same key on the next item keeps
+  it going; another key fades out, then in; items with sound duck it (or pause it at 0 %); the
+  media channel scales the item engine. mpv's volume is perceptual (cubic), so levels behave like
+  faders on a desk. Verified on a real player: plays at rest, pauses during an audio item and
+  returns with a fade, continues across slides with the same source, stops for silence.
+- Older players ignore `MIXER` and the new fields (no background music until updated).
+
 ## 4. Operation and administration modes
 
 - **Operation mode**: for use during the event. Live control first (big controls, current/next,
@@ -135,7 +155,7 @@ also used by the timer (scene end time) and the operation view.
 
 ## Phases
 
-Status: phase A implemented; phase B implemented and tested with a simulated worker (real yt-dlp/Demucs run pending); C–E to do.
+Status: phases A and C implemented; phase B implemented and tested with a simulated worker (real yt-dlp/Demucs run pending: network); D–E to do.
 
 | Phase | Content |
 |---|---|

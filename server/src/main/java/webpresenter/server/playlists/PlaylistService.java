@@ -11,17 +11,20 @@ import webpresenter.server.library.MediaUsage;
 import webpresenter.server.songs.SongCatalog;
 
 @Service
-class PlaylistService implements MediaUsage {
+class PlaylistService implements MediaUsage, PlaylistCatalog {
 
     private final PlaylistRepository playlists;
     private final SongCatalog songs;
     private final MediaCatalog catalog;
+    private final org.springframework.context.ApplicationEventPublisher events;
     private final Clock clock = Clock.systemUTC();
 
-    PlaylistService(PlaylistRepository playlists, SongCatalog songs, MediaCatalog catalog) {
+    PlaylistService(PlaylistRepository playlists, SongCatalog songs, MediaCatalog catalog,
+            org.springframework.context.ApplicationEventPublisher events) {
         this.playlists = playlists;
         this.songs = songs;
         this.catalog = catalog;
+        this.events = events;
     }
 
     @Transactional(readOnly = true)
@@ -47,6 +50,7 @@ class PlaylistService implements MediaUsage {
     Playlist update(UUID id, String name, String description, boolean shuffle) {
         Playlist playlist = find(id);
         playlist.describe(name.strip(), blank(description), shuffle, clock.instant());
+        events.publishEvent(new PlaylistChanged(id));
         return loaded(playlist);
     }
 
@@ -57,12 +61,81 @@ class PlaylistService implements MediaUsage {
             validate(item);
         }
         playlist.setItems(items, clock.instant());
+        events.publishEvent(new PlaylistChanged(id));
         return loaded(playlist);
     }
 
     @Transactional
     void delete(UUID id) {
         playlists.delete(find(id));
+        events.publishEvent(new PlaylistChanged(id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public void validate(BackgroundSource source) {
+        if (source == null || source.kind() == null) {
+            throw new IllegalArgumentException("background music kind is required");
+        }
+        switch (source.kind()) {
+            case SILENCE -> { }
+            case PLAYLIST -> {
+                if (source.ref() == null || !playlists.existsById(source.ref())) {
+                    throw new IllegalArgumentException("playlist " + source.ref() + " does not exist");
+                }
+            }
+            case MEDIA -> {
+                var media = catalog.find(source.ref() == null ? new UUID(0, 0) : source.ref())
+                        .orElseThrow(() -> new IllegalArgumentException("media " + source.ref() + " does not exist"));
+                if (media.kind() == MediaKind.IMAGE) {
+                    throw new IllegalArgumentException("background music must be audio or video");
+                }
+            }
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<Tracks> tracks(BackgroundSource source) {
+        if (source == null || source.kind() == null || source.kind() == BackgroundSource.Kind.SILENCE) {
+            return java.util.Optional.empty();
+        }
+        if (source.kind() == BackgroundSource.Kind.MEDIA) {
+            return catalog.find(source.ref()).filter(m -> m.kind() != MediaKind.IMAGE)
+                    .map(m -> new Tracks("media:" + m.id(), List.of(m.id()), false));
+        }
+        return playlists.findById(source.ref()).flatMap(p -> {
+            List<UUID> media = p.items().stream().map(this::trackOf).flatMap(java.util.Optional::stream).toList();
+            return media.isEmpty() ? java.util.Optional.empty()
+                    : java.util.Optional.of(new Tracks("playlist:" + p.id() + ":" + p.updatedAt().toEpochMilli(),
+                            media, p.shuffle()));
+        });
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public String describe(BackgroundSource source) {
+        if (source == null || source.kind() == BackgroundSource.Kind.SILENCE) {
+            return "Silêncio";
+        }
+        return source.kind() == BackgroundSource.Kind.PLAYLIST
+                ? playlists.findById(source.ref()).map(p -> "Playlist " + p.name()).orElse("(playlist removida)")
+                : catalog.find(source.ref()).map(m -> m.title()).orElse("(mídia removida)");
+    }
+
+    private java.util.Optional<UUID> trackOf(PlaylistItem item) {
+        if (item.type() == PlaylistItem.Type.MEDIA) {
+            return catalog.find(item.mediaId()).map(m -> m.id());
+        }
+        return songs.find(item.songId()).flatMap(song -> {
+            if (item.recordingId() != null) {
+                return song.recording(item.recordingId()).map(r -> r.mediaId());
+            }
+            return song.recordings().stream()
+                    .filter(r -> r.kind() == webpresenter.server.songs.RecordingKind.SUNG).findFirst()
+                    .or(() -> song.recordings().stream().findFirst())
+                    .map(r -> r.mediaId());
+        });
     }
 
     @Override

@@ -16,10 +16,10 @@
   @if (currentUser.user()) {
     <mat-button-toggle-group class="mode" [value]="uiMode.mode()" (change)="switchMode($event.value)"
                              hideSingleSelectionIndicator aria-label="Modo da interface">
-      <mat-button-toggle value="operation" aria-label="Modo de operação">
+      <mat-button-toggle value="operation" aria-label="Modo de operação" matTooltip="Modo de operação">
         <mat-icon>play_circle</mat-icon><span class="mode-label">Operação</span>
       </mat-button-toggle>
-      <mat-button-toggle value="admin" aria-label="Modo administrativo">
+      <mat-button-toggle value="admin" aria-label="Modo administrativo" matTooltip="Modo administrativo">
         <mat-icon>tune</mat-icon><span class="mode-label">Administração</span>
       </mat-button-toggle>
     </mat-button-toggle-group>

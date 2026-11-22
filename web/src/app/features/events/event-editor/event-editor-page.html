@@ -12,14 +12,16 @@
       </h1>
       <div class="meta">
         @if (e.startsAt) { {{ e.startsAt | date: "EEEE, d 'de' MMMM 'às' HH:mm" }} · }
-        {{ e.items.length }} {{ e.items.length === 1 ? 'item' : 'itens' }}
+        {{ presentedCount() }} {{ presentedCount() === 1 ? 'item' : 'itens' }}
         @if (totalDurationMs() > 0) { · {{ totalDurationMs() | duration }} de mídia }
+        · <span class="event-background"><mat-icon inline>graphic_eq</mat-icon> {{ e.background ? e.background.name : 'fundo musical padrão' }}</span>
       </div>
     </div>
     @if (canEdit()) {
       <button mat-icon-button [matMenuTriggerFor]="eventMenu" aria-label="Opções do evento"><mat-icon>more_vert</mat-icon></button>
       <mat-menu #eventMenu="matMenu" xPosition="before">
         <button mat-menu-item (click)="editDetails()"><mat-icon>edit</mat-icon>Editar título e data</button>
+        <button mat-menu-item (click)="chooseEventBackground()"><mat-icon>graphic_eq</mat-icon>Fundo musical do evento</button>
         <button mat-menu-item (click)="deleteEvent()"><mat-icon>delete</mat-icon>Excluir evento</button>
       </mat-menu>
     }
@@ -91,6 +93,7 @@
           <button mat-stroked-button (click)="addSong()" [disabled]="saving()"><mat-icon>queue_music</mat-icon>Adicionar música</button>
           <button mat-stroked-button (click)="addMedia()" [disabled]="saving()"><mat-icon>video_library</mat-icon>Adicionar mídia</button>
           <button mat-stroked-button (click)="addSlide()" [disabled]="saving()"><mat-icon>text_fields</mat-icon>Adicionar slide</button>
+          <button mat-stroked-button (click)="addScene()" [disabled]="saving()"><mat-icon>segment</mat-icon>Adicionar cena</button>
         </div>
       }
     </div>
@@ -103,11 +106,11 @@
     } @else {
       <ol class="items" cdkDropList [cdkDropListDisabled]="!canEdit() || saving()" (cdkDropListDropped)="drop($event)">
         @for (item of e.items; track item.id; let i = $index) {
-          <li class="item" cdkDrag [attr.aria-label]="item.title">
+          <li class="item" [class.scene]="item.type === 'SCENE'" cdkDrag [attr.aria-label]="item.type === 'SCENE' ? 'Cena ' + item.title : item.title">
             @if (canEdit()) {
               <mat-icon class="handle" cdkDragHandle aria-label="Arrastar para reordenar">drag_indicator</mat-icon>
             }
-            <span class="position">{{ i + 1 }}</span>
+            <span class="position">{{ item.type === 'SCENE' ? '' : positions().get(item.id) }}</span>
             <mat-icon class="kind">{{ icon(item) }}</mat-icon>
             <span class="item-main">
               <span class="item-title">{{ item.title }}</span>
@@ -117,9 +120,16 @@
               @if (item.song) {
                 <span class="item-sub">{{ songMode(item) }} · {{ item.song.slideCount }} slides</span>
               }
+              @if (item.type === 'SCENE' && sceneTimes(item)) {
+                <span class="item-sub">{{ sceneTimes(item) }}</span>
+              }
+              @if (item.background) {
+                <span class="item-sub background"><mat-icon inline>graphic_eq</mat-icon> {{ item.background.name }}</span>
+              }
             </span>
             <span class="item-meta">
-              @if (item.type === 'SLIDE') { Slide }
+              @if (item.type === 'SCENE') { Cena }
+              @else if (item.type === 'SLIDE') { Slide }
               @else if (item.type === 'SONG') { {{ item.song?.durationMs | duration }} }
               @else { {{ item.media?.durationMs | duration }} }
             </span>
@@ -147,6 +157,14 @@
                     <mat-icon>edit</mat-icon>
                   </button>
                 }
+                @if (item.type === 'SCENE') {
+                  <button mat-icon-button aria-label="Editar cena" matTooltip="Editar nome e horário" [disabled]="saving()" (click)="editScene(item)">
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                }
+                <button mat-icon-button aria-label="Fundo musical" matTooltip="Fundo musical" [disabled]="saving()" (click)="chooseItemBackground(item)">
+                  <mat-icon>graphic_eq</mat-icon>
+                </button>
                 <button mat-icon-button aria-label="Remover item" matTooltip="Remover do evento" [disabled]="saving()" (click)="removeItem(item)">
                   <mat-icon>close</mat-icon>
                 </button>
