@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>webpresenter</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 2rem 1rem; background: #0b1020; color: #f1f3f8; }
+  main { max-width: 34rem; margin: 0 auto; }
+  h1 { font-weight: 500; margin: 0 0 1.5rem; }
+  a.button { display: block; padding: 1rem; margin: 0 0 1rem; border-radius: 12px; background: #3b6fe0; color: #fff;
+    text-decoration: none; font-size: 1.15rem; text-align: center; }
+  a.secondary { background: #1d2b53; }
+  p { color: #b9c1d6; line-height: 1.5; }
+  code { background: #1d2b53; padding: 0.1rem 0.35rem; border-radius: 4px; }
+</style>
+</head>
+<body>
+<main>
+  {{$host := .Host}}
+  <h1>webpresenter</h1>
+  <a class="button" href="https://{{$host}}:{{env "PUBLIC_PORT"}}/">Abrir o painel</a>
+  <a class="button secondary" href="/webpresenter-ca.crt">Baixar o certificado (instale uma vez por aparelho)</a>
+  <p>Esta porta (<code>{{env "PLAYER_PORT"}}</code>) é a dos telões. O painel fica em
+    <code>https://{{$host}}:{{env "PUBLIC_PORT"}}</code>.</p>
+  <p>Sem o certificado instalado, o navegador mostra um aviso de segurança ao abrir o painel.
+    No Android: Configurações → Segurança → Criptografia e credenciais → Instalar certificado → Certificado de CA.
+    No iPhone: instale o perfil baixado e ative-o em Ajustes → Geral → Sobre → Ajustes de Confiança de Certificados.</p>
+</main>
+</body>
+</html>

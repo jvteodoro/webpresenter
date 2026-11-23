@@ -2,20 +2,19 @@
 # Caddy serves HTTPS with its own local certificate authority: install its root certificate once per
 # device (see docs/deployment.md). MediaPlayers use plain HTTP on the LAN through a separate port.
 #
-# Nothing here depends on this computer's address: certificates are issued on demand for the
-# name (or address) a browser uses, and media links are relative (/s3/…).
+# Nothing here depends on this computer's address. Caddy runs on the host network, so it knows
+# which address a client connected to: certificates are issued on demand by the local CA for that
+# address (https://<IP>:PUBLIC_PORT) or for the name used (https://webpresenter.local:PUBLIC_PORT).
+# Media links are relative (/s3/…).
 {
-	# IP addresses carry no SNI: present the certificate of the announced name.
-	default_sni {$PUBLIC_NAME}
 	# The internal CA lives in the caddy-data volume; nothing is fetched from the internet.
 	local_certs
 	skip_install_trust
-	# Port 80 serves MediaPlayers over HTTP; no automatic HTTP→HTTPS redirect there.
+	# The player port serves MediaPlayers over HTTP; no automatic HTTP→HTTPS redirect there.
 	auto_https disable_redirects
-	# Certificates for any name the server is reached by on the LAN (its own CA; the server only
-	# answers on the LAN).
+	# Certificates for any name or address the server is reached by on the LAN (its own CA).
 	on_demand_tls {
-		ask http://server:8090/actuator/health
+		ask http://{$SERVER_LOCAL}/actuator/health
 	}
 }
 
@@ -23,7 +22,7 @@
 	# Presigned links are made for the host "webpresenter-s3"; the store checks the signature
 	# against the host it receives, so that host is set back here.
 	handle_path /s3/* {
-		reverse_proxy seaweedfs:8333 {
+		reverse_proxy {$S3_LOCAL} {
 			header_up Host webpresenter-s3
 			# SeaweedFS checks signatures against X-Forwarded-Host/Port when present.
 			header_up -X-Forwarded-Host
@@ -33,8 +32,8 @@
 	}
 }
 
-# Web app, API, live stream, Keycloak (/auth) and media for browsers, on any name.
-https:// {
+# Web app, API, live stream, Keycloak (/auth) and media for browsers, on any name or address.
+https://:{$PUBLIC_PORT} {
 	tls internal {
 		on_demand
 	}
@@ -42,16 +41,16 @@ https:// {
 	import media
 
 	@keycloak path /auth /auth/*
-	reverse_proxy @keycloak keycloak:8080
+	reverse_proxy @keycloak {$KEYCLOAK_LOCAL}
 
-	reverse_proxy server:8090 {
+	reverse_proxy {$SERVER_LOCAL} {
 		# Live state is streamed (Server-Sent Events): pass bytes through as they come.
 		flush_interval -1
 	}
 }
 
-# MediaPlayers (WebSocket, media) and the root certificate download, over plain HTTP on the LAN.
-http://:80 {
+# MediaPlayers (WebSocket, media), the root certificate and a landing page, over plain HTTP.
+http://:{$PLAYER_PORT} {
 	import media
 	handle /webpresenter-ca.crt {
 		root * /data/caddy/pki/authorities/local
@@ -60,12 +59,17 @@ http://:80 {
 		file_server
 	}
 	handle /ws/player {
-		reverse_proxy server:8090
+		reverse_proxy {$SERVER_LOCAL}
 	}
 	handle /actuator/health {
-		reverse_proxy server:8090
+		reverse_proxy {$SERVER_LOCAL}
 	}
+	# Someone opened the players' port in a browser: show where the panel is (this same address).
 	handle {
-		respond "webpresenter: open https://{$PUBLIC_NAME} in the browser" 404
+		root * /srv
+		rewrite * /landing.html
+		templates
+		header Content-Type "text/html; charset=utf-8"
+		file_server
 	}
 }
