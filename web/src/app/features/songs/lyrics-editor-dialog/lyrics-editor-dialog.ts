@@ -35,7 +35,8 @@ export interface LyricsEditorData {
         <p class="summary">{{ summary() }}</p>
       }
       @if (data.hasTiming && changesStructure()) {
-        <p class="warning">A quantidade de slides mudou: os tempos das gravações precisarão ser revisados.</p>
+        <p class="warning">A sequência de slides mudou: os tempos das gravações precisarão ser revisados.
+          (Corrigir palavras sem mudar os slides mantém os tempos.)</p>
       }
     </mat-dialog-content>
     <mat-dialog-actions align="end">
@@ -88,7 +89,7 @@ export class LyricsEditorDialog {
   });
   protected readonly changesStructure = computed(() => {
     const l = this.parsed().lyrics;
-    return !!l && slideCount(l) !== slideCount(this.data.lyrics);
+    return !!l && shape(l).join() !== shape(this.data.lyrics).join();
   });
 
   protected save(): void {
@@ -102,4 +103,18 @@ export class LyricsEditorDialog {
 function slideCount(lyrics: Lyrics): number {
   const sizes = new Map(lyrics.parts.map((p) => [p.id, p.slides.length]));
   return lyrics.order.reduce((n, id) => n + (sizes.get(id) ?? 0), 0);
+}
+
+/**
+ * The singing order's structure, as the server compares it to keep or drop timings: for each
+ * entry of the order, which part (by first appearance) and how many slides it has.
+ */
+export function shape(lyrics: Lyrics): string[] {
+  const seen: string[] = [];
+  return lyrics.order.map((id) => {
+    if (!seen.includes(id)) {
+      seen.push(id);
+    }
+    return `${seen.indexOf(id)}:${lyrics.parts.find((p) => p.id === id)?.slides.length ?? 0}`;
+  });
 }

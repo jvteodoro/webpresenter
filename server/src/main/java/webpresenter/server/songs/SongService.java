@@ -295,6 +295,38 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
         }
     }
 
+    /**
+     * The singing order's structure, independent of words and part ids: for each entry of the
+     * order, which part it is (by first appearance) and how many slides that part has.
+     */
+    static List<String> shape(Lyrics lyrics) {
+        List<String> firstSeen = new java.util.ArrayList<>();
+        java.util.Map<String, Integer> slides = new java.util.HashMap<>();
+        lyrics.parts().forEach(p -> slides.put(p.id(), p.slides().size()));
+        List<String> result = new java.util.ArrayList<>();
+        for (String id : lyrics.order()) {
+            if (!firstSeen.contains(id)) {
+                firstSeen.add(id);
+            }
+            result.add(firstSeen.indexOf(id) + ":" + slides.getOrDefault(id, 0));
+        }
+        return result;
+    }
+
+    /** Timings made for the previous lyrics version move to the current one, keeping their review state. */
+    private void carryTimingForward(Song song, int previousVersion) {
+        for (Recording recording : song.recordings()) {
+            if (recording.timingJson() == null) {
+                continue;
+            }
+            Timing timing = json.readValue(recording.timingJson(), Timing.class);
+            if (java.util.Objects.equals(timing.lyricsVersion(), previousVersion)) {
+                recording.setTiming(json.writeValueAsString(
+                        new Timing(song.lyricsVersion(), timing.source(), timing.reviewed(), timing.cues())));
+            }
+        }
+    }
+
     private static String language(SongInput input) {
         return input.language() == null || input.language().isBlank() ? "pt" : input.language().strip();
     }
@@ -319,7 +351,12 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
         } catch (IllegalArgumentException e) {
             throw new InvalidSongException("invalid lyrics: " + e.getMessage());
         }
-        song.replaceLyrics(json.writeValueAsString(lyrics), now);
+        List<String> shapeBefore = song.lyricsJson() == null ? null : shape(lyrics(song));
+        int versionBefore = song.lyricsVersion();
+        if (song.replaceLyrics(json.writeValueAsString(lyrics), now) && shape(lyrics).equals(shapeBefore)) {
+            // Same slides in the same order (words corrected): the times still hold.
+            carryTimingForward(song, versionBefore);
+        }
         song.setText(input.textColor(), input.textScale());
         if (input.collections() != null) {
             song.setCollections(input.collections().stream()
