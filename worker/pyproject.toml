@@ -19,6 +19,11 @@ separation = [
     "soundfile==0.13.1",
 ]
 
+# Lyrics and timing from sung recordings (Whisper, CTranslate2 on CPU).
+lyrics = [
+    "faster-whisper==1.2.1",
+]
+
 [project.scripts]
 webpresenter-worker = "webpresenter_worker.main:main"
 

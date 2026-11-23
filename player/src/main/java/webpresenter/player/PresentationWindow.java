@@ -63,6 +63,10 @@ final class PresentationWindow {
     private final Label songCue = label(FontWeight.NORMAL, Color.web("#ffd27a"));
     private final Label songLines = label(FontWeight.BOLD, Color.WHITE);
     private final VBox songText = new VBox(18);
+    private final ImageView slideBackground = fitted(new ImageView());
+    /** Text style of slides and lyrics (slide style of the item): colour and size in percent. */
+    private Color textColor = Color.WHITE;
+    private double textScale = 1;
     private final Label slideTitle = label(FontWeight.BOLD, Color.WHITE);
     private final Label slideBody = label(FontWeight.NORMAL, Color.gray(0.92));
     /** Clock or timer item: label, big value, a line below. */
@@ -120,7 +124,23 @@ final class PresentationWindow {
 
         VBox slideText = new VBox(28, slideTitle, slideBody);
         slideText.setAlignment(Pos.CENTER);
-        slide.getChildren().add(slideText);
+        // Optional background image (slide style), covering the output and darkened for contrast.
+        javafx.scene.layout.Region slideShade = new javafx.scene.layout.Region();
+        slideShade.setStyle("-fx-background-color: rgba(0,0,0,0.45);");
+        slideShade.visibleProperty().bind(slideBackground.imageProperty().isNotNull());
+        javafx.scene.effect.DropShadow slideShadow = new javafx.scene.effect.DropShadow(18, Color.color(0, 0, 0, 0.85));
+        slideShadow.setSpread(0.25);
+        slideText.setEffect(slideShadow);
+        slide.getChildren().addAll(slideBackground, slideShade, slideText);
+        slide.setMinSize(0, 0);
+        javafx.scene.shape.Rectangle slideClip = new javafx.scene.shape.Rectangle();
+        slideClip.widthProperty().bind(slide.widthProperty());
+        slideClip.heightProperty().bind(slide.heightProperty());
+        slide.setClip(slideClip);
+        javafx.beans.InvalidationListener coverSlide = o -> cover(slideBackground);
+        root.widthProperty().addListener(coverSlide);
+        root.heightProperty().addListener(coverSlide);
+        slideBackground.imageProperty().addListener(coverSlide);
         slide.setBackground(new Background(new BackgroundFill(new LinearGradient(0, 0, 1, 1, true,
                 CycleMethod.NO_CYCLE, new Stop(0, Color.web("#1d2b53")), new Stop(1, Color.web("#0b1020"))), null, null)));
         slide.setOpacity(0);
@@ -348,7 +368,13 @@ final class PresentationWindow {
     }
 
     void showSlide(String title, String body) {
+        showSlide(title, body, null);
+    }
+
+    /** A text slide over the default background, or over {@code background} (an image file). */
+    void showSlide(String title, String body, Path background) {
         enterItem(new Item(ItemKind.SLIDE, null, 0));
+        setSlideBackground(background);
         slideTitle.setText(title == null ? "" : title);
         slideBody.setText(body == null ? "" : body);
         slideBody.setManaged(body != null && !body.isBlank());
@@ -380,6 +406,30 @@ final class PresentationWindow {
         clockValue.setTextFill(alert ? Color.web("#ff6b6b") : Color.WHITE);
         clockSub.setText(sub == null ? "" : sub);
         clockSub.setManaged(sub != null && !sub.isBlank());
+    }
+
+    /** Sets the slide background later (when its download finishes after the slide appeared). */
+    void setSlideBackground(Path background) {
+        slideBackground.setImage(background == null ? null : new Image(background.toUri().toString()));
+    }
+
+    /**
+     * Text colour ("#rrggbb", null for white) and size (percent) of slides and lyrics, from the
+     * item's slide style. Applies to what is on screen at once.
+     */
+    void setTextStyle(String color, int scalePercent) {
+        Color parsed;
+        try {
+            parsed = color == null ? Color.WHITE : Color.web(color);
+        } catch (IllegalArgumentException e) {
+            parsed = Color.WHITE;
+        }
+        textColor = parsed;
+        textScale = Math.clamp(scalePercent <= 0 ? 100 : scalePercent, 50, 200) / 100.0;
+        slideTitle.setTextFill(textColor);
+        slideBody.setTextFill(textColor.deriveColor(0, 1, 0.92, 1));
+        songLines.setTextFill(textColor);
+        scaleText(root.getHeight() > 0 ? root.getHeight() : 720);
     }
 
     /** Shows the time over the rest screen (device setting). */
@@ -607,10 +657,10 @@ final class PresentationWindow {
     }
 
     private void scaleText(double height) {
-        slideTitle.setFont(Font.font("System", FontWeight.BOLD, Math.max(24, height * 0.085)));
-        slideBody.setFont(Font.font("System", FontWeight.NORMAL, Math.max(18, height * 0.055)));
-        songLines.setFont(Font.font("System", FontWeight.BOLD, Math.max(26, height * 0.075)));
-        songCue.setFont(Font.font("System", FontWeight.NORMAL, Math.max(16, height * 0.04)));
+        slideTitle.setFont(Font.font("System", FontWeight.BOLD, Math.max(24, height * 0.085) * textScale));
+        slideBody.setFont(Font.font("System", FontWeight.NORMAL, Math.max(18, height * 0.055) * textScale));
+        songLines.setFont(Font.font("System", FontWeight.BOLD, Math.max(26, height * 0.075) * textScale));
+        songCue.setFont(Font.font("System", FontWeight.NORMAL, Math.max(16, height * 0.04) * textScale));
         infoTitle.setFont(Font.font("System", FontWeight.LIGHT, Math.max(20, height * 0.06)));
         infoCode.setFont(Font.font("Monospaced", FontWeight.BOLD, Math.max(40, height * 0.16)));
         infoDetail.setFont(Font.font("System", FontWeight.NORMAL, Math.max(14, height * 0.032)));

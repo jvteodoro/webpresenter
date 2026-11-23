@@ -10,8 +10,9 @@ public interface SongCatalog {
     Optional<SongPlan> find(UUID songId);
 
     /** What presenting a song needs: the slide sequence, recordings with usable timing, background. */
+    /** @param style the song's own slide appearance (its background, text colour and size) */
     record SongPlan(UUID id, String title, List<PlanSlide> slides, List<PlanRecording> recordings,
-            UUID backgroundMediaId) {
+            UUID backgroundMediaId, SlideStyle style) {
 
         public Optional<PlanRecording> recording(UUID recordingId) {
             return recordings.stream().filter(r -> r.id().equals(recordingId)).findFirst();

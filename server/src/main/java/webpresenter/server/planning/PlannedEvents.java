@@ -28,12 +28,15 @@ public interface PlannedEvents {
          * @param background effective background music: the item's, else its scene's, else the
          *     event's; null inherits the platform's
          */
+        /** @param style the item's slide appearance over the event's (a song's own style still applies beneath) */
         public record Item(UUID id, ItemType type, UUID mediaId, String slideTitle, String slideBody, UUID songId,
-                UUID recordingId, Scene scene, BackgroundSource background, String label, Timer timer) {
+                UUID recordingId, Scene scene, BackgroundSource background, String label, Timer timer,
+                webpresenter.server.songs.SlideStyle style) {
 
             public Item(UUID id, ItemType type, UUID mediaId, String slideTitle, String slideBody, UUID songId,
                     UUID recordingId) {
-                this(id, type, mediaId, slideTitle, slideBody, songId, recordingId, null, null, null, null);
+                this(id, type, mediaId, slideTitle, slideBody, songId, recordingId, null, null, null, null,
+                        webpresenter.server.songs.SlideStyle.NONE);
             }
         }
 

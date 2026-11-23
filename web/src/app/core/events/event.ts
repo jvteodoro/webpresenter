@@ -34,6 +34,20 @@ export interface EventItem {
   timer: TimerView | null;
   /** For a variable slot: what it expects. */
   slotKind?: 'SONG' | 'MEDIA' | 'SLIDE' | 'ANY' | null;
+  /** The item's own slide appearance (null fields inherit the event's, then the song's). */
+  style?: StyleView | null;
+}
+
+/** What is stored: absent/null fields inherit. */
+export interface SlideStyle {
+  backgroundMediaId: string | null;
+  textColor: string | null;
+  textScale: number | null;
+}
+
+export interface StyleView extends SlideStyle {
+  backgroundTitle: string | null;
+  backgroundUrl: string | null;
 }
 
 export type TimerMode = 'SCENE_END' | 'TIME' | 'DURATION';
@@ -92,6 +106,8 @@ export interface EventDetail {
   templateDate: string | null;
   /** Variable slots still to be filled. */
   pendingSlots: number;
+  /** The event's slide appearance (null fields: the songs' own). */
+  style?: StyleView | null;
 }
 
 export interface EventInput {

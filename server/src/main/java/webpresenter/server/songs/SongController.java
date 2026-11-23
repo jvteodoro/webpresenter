@@ -127,7 +127,8 @@ class SongController {
     record SongDetail(UUID id, String title, String alternativeTitles, String language, String authors,
             String copyright, SongStatus status, Source source, String origin, String externalId,
             MediaRef background, List<CollectionRef> collections, Lyrics lyrics, int lyricsVersion,
-            List<Lyrics.SequenceSlide> slideSequence, List<RecordingView> recordings, Instant updatedAt) {}
+            List<Lyrics.SequenceSlide> slideSequence, List<RecordingView> recordings, Instant updatedAt, String textColor,
+            Integer textScale) {}
 
     private SongSummary summary(Song song) {
         List<Lyrics.SequenceSlide> sequence = service.lyrics(song).slideSequence();
@@ -147,7 +148,8 @@ class SongController {
         return new SongDetail(song.id(), song.title(), song.alternativeTitles(), song.language(), song.authors(),
                 song.copyright(), song.status(), song.source(), song.origin(), song.externalId(),
                 song.backgroundMediaId() == null ? null : media(song.backgroundMediaId()), collectionRefs(song),
-                lyrics, song.lyricsVersion(), lyrics.slideSequence(), recordings, song.updatedAt());
+                lyrics, song.lyricsVersion(), lyrics.slideSequence(), recordings, song.updatedAt(), song.style().textColor(),
+                song.style().textScale());
     }
 
     private List<CollectionRef> collectionRefs(Song song) {

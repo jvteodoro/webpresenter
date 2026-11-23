@@ -21,6 +21,25 @@ public interface SongPipeline {
      */
     UUID createFromRecording(String title, UUID mediaId);
 
+    /**
+     * Applies lyrics and timing found from a sung recording: new lyrics (when transcribed; null
+     * keeps the song's) and the start of each slide, on that recording and on the PLAYBACK
+     * recordings generated from the song by the pipeline (same timeline). The song becomes a draft
+     * and the timing is marked not reviewed.
+     *
+     * @param lyricsJson {"parts": …, "order": …} or null
+     * @return the number of slides in the sequence
+     */
+    int applyGeneratedLyrics(UUID songId, UUID recordingId, String lyricsJson, java.util.List<GeneratedCue> cues);
+
+    record GeneratedCue(int slide, long startMs) {}
+
+    /**
+     * The text of each slide of the song in singing order ("" for instrumental slides), or empty
+     * when the song has no lyrics yet (only instrumental placeholders).
+     */
+    java.util.List<String> slideTexts(UUID songId);
+
     /** The media of a recording, if the song and recording exist. */
     java.util.Optional<UUID> recordingMedia(UUID songId, UUID recordingId);
 }

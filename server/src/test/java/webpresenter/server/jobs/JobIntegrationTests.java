@@ -155,6 +155,74 @@ class JobIntegrationTests {
     }
 
     @Test
+    void transcribesLyricsOfASongWithoutThemAndTimesItsGeneratedPlaybackToo() throws Exception {
+        String sung = upload(TestMedia.tone(dir, 700 + (int) (System.nanoTime() % 300)), "vinde.m4a", "SONG_AUDIO");
+        UUID song = id(send(post("/api/songs"), """
+                {"title":"Vinde a Mim","lyrics":{"parts":[{"id":"i","kind":"INSTRUMENTAL","label":"Instrumental",
+                 "slides":[{"lines":[]}]}],"order":["i"]}}"""));
+        UUID recording = UUID.fromString(body(send(post("/api/songs/" + song + "/recordings"),
+                "{\"kind\":\"SUNG\",\"mediaId\":\"%s\"}".formatted(sung))).get("recordings").get(0).get("id").asString());
+        // A playback generated before the lyrics existed.
+        UUID separation = id(send(post("/api/jobs/separate-playback"),
+                "{\"songId\":\"%s\",\"recordingId\":\"%s\"}".formatted(song, recording)));
+        putResult(queue.last(separation), TestMedia.tone(dir, 1100 + (int) (System.nanoTime() % 300)));
+        jobs.onWorkerEvent(new WorkerMessages.WorkerEvent(separation, 1, "DONE", 100, null, "playback.m4a", null));
+
+        UUID job = id(send(post("/api/jobs/transcribe-lyrics"), "{\"songId\":\"%s\",\"recordingId\":\"%s\"}"
+                .formatted(song, recording))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.title").value("Letra e tempos · Vinde a Mim")));
+        var request = queue.last(job);
+        assertThat(request.type()).isEqualTo(JobType.TRANSCRIBE_LYRICS);
+        assertThat(request.params()).doesNotContainKey("slides"); // no lyrics yet: transcribe
+        assertThat(request.inputUrl()).isNotNull();
+
+        putJson(request, """
+                {"mode":"transcribed","language":"pt","confidence":null,
+                 "lyrics":{"parts":[{"id":"v1","kind":"VERSE","label":"Estrofe 1","slides":[{"lines":["Vinde a mim","Os cansados"]}]},
+                                    {"id":"c","kind":"CHORUS","label":"Coro","slides":[{"lines":["Tomai o meu jugo"]}]}],
+                           "order":["v1","c","c"]},
+                 "cues":[{"slide":0,"startMs":9000},{"slide":1,"startMs":20000},{"slide":2,"startMs":41000}]}""");
+        jobs.onWorkerEvent(new WorkerMessages.WorkerEvent(job, 1, "DONE", 100, null, "lyrics.json", null));
+
+        mvc.perform(get("/api/jobs/" + job).with(tech()))
+                .andExpect(jsonPath("$.status").value("DONE"))
+                .andExpect(jsonPath("$.result.mode").value("transcribed"))
+                .andExpect(jsonPath("$.result.slides").value(3));
+        JsonNode detail = body(mvc.perform(get("/api/songs/" + song).with(tech())));
+        assertThat(detail.get("status").asString()).isEqualTo("DRAFT");
+        assertThat(detail.get("slideSequence")).hasSize(3);
+        assertThat(detail.get("recordings")).hasSize(2);
+        for (JsonNode r : detail.get("recordings")) {
+            // The sung recording and the playback generated from it share the timeline.
+            assertThat(r.get("timing").get("cues").get(2).get("startMs").asLong()).isEqualTo(41000);
+            assertThat(r.get("timing").get("source").asString()).isEqualTo("PIPELINE");
+            assertThat(r.get("timing").get("reviewed").asBoolean()).isFalse();
+            assertThat(r.get("timingCurrent").asBoolean()).isTrue();
+        }
+    }
+
+    @Test
+    void alignsTheLyricsASongAlreadyHas() throws Exception {
+        String sung = upload(TestMedia.tone(dir, 1700 + (int) (System.nanoTime() % 200)), "hino.m4a", "SONG_AUDIO");
+        UUID song = id(send(post("/api/songs"), "{\"title\":\"Hino com letra\",\"lyrics\":" + LYRICS + "}"));
+        UUID recording = UUID.fromString(body(send(post("/api/songs/" + song + "/recordings"),
+                "{\"kind\":\"SUNG\",\"mediaId\":\"%s\"}".formatted(sung))).get("recordings").get(0).get("id").asString());
+
+        UUID job = id(send(post("/api/jobs/transcribe-lyrics"), "{\"songId\":\"%s\",\"recordingId\":\"%s\"}"
+                .formatted(song, recording)).andExpect(jsonPath("$.title").value("Tempos da letra · Hino com letra")));
+        assertThat(queue.last(job).params()).containsEntry("slides", java.util.List.of("um", "dois"));
+        putJson(queue.last(job),
+                "{\"mode\":\"aligned\",\"confidence\":0.86,\"cues\":[{\"slide\":0,\"startMs\":3000},{\"slide\":1,\"startMs\":7500}]}");
+        jobs.onWorkerEvent(new WorkerMessages.WorkerEvent(job, 1, "DONE", 100, null, "lyrics.json", null));
+
+        mvc.perform(get("/api/jobs/" + job).with(tech())).andExpect(jsonPath("$.result.confidence").value(0.86));
+        mvc.perform(get("/api/songs/" + song).with(tech()))
+                .andExpect(jsonPath("$.lyrics.parts[0].slides[0].lines[0]").value("um")) // lyrics kept
+                .andExpect(jsonPath("$.recordings[0].timing.cues[1].startMs").value(7500));
+    }
+
+    @Test
     void importsFromALinkAsBackgroundMusicOrAsANewSong() throws Exception {
         UUID music = id(send(post("/api/jobs/youtube-import"), """
                 {"url":"https://www.youtube.com/watch?v=Xx1MjhzKcYw","target":"BACKGROUND_MUSIC"}""")
@@ -227,6 +295,12 @@ class JobIntegrationTests {
     private void putResult(WorkerMessages.JobRequest request, Path file) throws Exception {
         HttpResponse<Void> response = http.send(HttpRequest.newBuilder(URI.create(request.outputUrl()))
                 .PUT(HttpRequest.BodyPublishers.ofFile(file)).build(), HttpResponse.BodyHandlers.discarding());
+        assertThat(response.statusCode()).isEqualTo(200);
+    }
+
+    private void putJson(WorkerMessages.JobRequest request, String content) throws Exception {
+        HttpResponse<Void> response = http.send(HttpRequest.newBuilder(URI.create(request.outputUrl()))
+                .PUT(HttpRequest.BodyPublishers.ofString(content)).build(), HttpResponse.BodyHandlers.discarding());
         assertThat(response.statusCode()).isEqualTo(200);
     }
 

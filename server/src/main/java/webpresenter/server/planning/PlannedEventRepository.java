@@ -30,4 +30,11 @@ interface PlannedEventRepository extends JpaRepository<PlannedEvent, UUID> {
             select distinct e.* from planned_event e join planned_event_item i on i.event_id = e.id
             where i.timer_signals @> cast(:containment as jsonb)""", nativeQuery = true)
     List<PlannedEvent> findAllWithSignalSound(String containment);
+
+    /** Events whose slide style (of the event or an item) uses this image ({"backgroundMediaId": "…"}). */
+    @Query(value = """
+            select distinct e.* from planned_event e left join planned_event_item i on i.event_id = e.id
+            where e.slide_style @> cast(:containment as jsonb) or i.slide_style @> cast(:containment as jsonb)""",
+            nativeQuery = true)
+    List<PlannedEvent> findAllWithStyleBackground(String containment);
 }

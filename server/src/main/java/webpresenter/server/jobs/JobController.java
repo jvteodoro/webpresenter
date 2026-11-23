@@ -69,6 +69,14 @@ class JobController {
         return jobs.separatePlayback(request.songId(), request.recordingId(), user.getName());
     }
 
+    /** Lyrics (if the song has none) and slide times from a sung recording. */
+    @PostMapping("/transcribe-lyrics")
+    @PreAuthorize(CAN_MANAGE)
+    @ResponseStatus(HttpStatus.CREATED)
+    JobView transcribeLyrics(@Valid @RequestBody SeparateRequest request, Authentication user) {
+        return jobs.transcribeLyrics(request.songId(), request.recordingId(), user.getName());
+    }
+
     @PostMapping("/{id}/cancel")
     @PreAuthorize(CAN_MANAGE)
     JobView cancel(@PathVariable UUID id) {

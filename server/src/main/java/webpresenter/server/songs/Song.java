@@ -45,6 +45,12 @@ class Song {
     @Column(name = "background_media_id")
     private UUID backgroundMediaId;
 
+    @Column(name = "text_color")
+    private String textColor;
+
+    @Column(name = "text_scale")
+    private Integer textScale;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Source source;
@@ -111,6 +117,12 @@ class Song {
     }
 
     /** Replaces the lyrics document; the version only increases when the content changes. */
+    /** Generated content needs review before the song is considered ready. */
+    void markDraft(Instant now) {
+        this.status = SongStatus.DRAFT;
+        this.updatedAt = now;
+    }
+
     boolean replaceLyrics(String json, Instant now) {
         if (lyrics != null && json.equals(lyrics)) {
             return false;
@@ -168,6 +180,13 @@ class Song {
     String authors() { return authors; }
     String copyright() { return copyright; }
     UUID backgroundMediaId() { return backgroundMediaId; }
+    /** The song's own slide appearance (background, text colour and size). */
+    SlideStyle style() { return new SlideStyle(backgroundMediaId, textColor, textScale); }
+
+    void setText(String textColor, Integer textScale) {
+        this.textColor = textColor;
+        this.textScale = textScale;
+    }
     Source source() { return source; }
     String origin() { return origin; }
     String externalId() { return externalId; }

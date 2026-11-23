@@ -324,6 +324,12 @@ class DeviceService implements Players {
         }).orElse(null));
     }
 
+    private Message.SlideStyle slideStyle(webpresenter.server.songs.SlideStyle style) {
+        Message.MediaRef background = style.backgroundMediaId() == null ? null
+                : catalog.find(style.backgroundMediaId()).map(this::mediaRef).orElse(null);
+        return new Message.SlideStyle(background, style.textColor(), style.textScale() == null ? 100 : style.textScale());
+    }
+
     private static Message.Mixer mixer(webpresenter.server.settings.AudioSettings a) {
         return new Message.Mixer(a.master(), a.media(), a.background(), a.effects(), a.fadeInMs(), a.fadeOutMs(),
                 a.duckPercent());
@@ -335,19 +341,20 @@ class DeviceService implements Players {
                 var recording = item.recordingId() == null ? null : plan.recording(item.recordingId()).orElse(null);
                 Message.MediaRef audio = recording == null ? null
                         : catalog.find(recording.mediaId()).map(this::mediaRef).orElse(null);
-                Message.MediaRef background = plan.backgroundMediaId() == null ? null
-                        : catalog.find(plan.backgroundMediaId()).map(this::mediaRef).orElse(null);
+                // Item (over event) style over the song's own: background, text colour and size.
+                Message.SlideStyle style = slideStyle(item.style().over(plan.style()));
+                Message.MediaRef background = style.background();
                 var slides = plan.slides().stream()
                         .map(sl -> new Message.SongSlide(sl.partLabel(), sl.instrumental(), sl.lines(), sl.cue()))
                         .toList();
                 var cues = audio == null || recording == null ? java.util.List.<Long>of() : recording.cueStartMs();
                 return new Message.PlanItem(item.id().toString(), Message.ItemType.SONG, plan.title(), null, null,
-                        new Message.SongContent(plan.title(), slides, audio, cues, background));
+                        new Message.SongContent(plan.title(), slides, audio, cues, background)).withStyle(style);
             });
         }
         if (item.type() == ItemType.SLIDE) {
             return Optional.of(new Message.PlanItem(item.id().toString(), Message.ItemType.SLIDE, item.slideTitle(),
-                    null, new Message.Slide(item.slideTitle(), item.slideBody())));
+                    null, new Message.Slide(item.slideTitle(), item.slideBody())).withStyle(slideStyle(item.style())));
         }
         if (item.type() == ItemType.CLOCK) {
             return Optional.of(new Message.PlanItem(item.id().toString(), Message.ItemType.CLOCK, item.label(),

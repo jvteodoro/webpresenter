@@ -45,6 +45,8 @@ class ProtocolCodecTest {
                         new PlanItem("i-6", ItemType.TIMER, "Oração", null, null, null, null,
                                 new Message.TimerContent(null, 120_000L, List.of())))),
                 new Config("Telão", 0, null, Transition.DEFAULT, true),
+                new Prepare("e-5", "Estilo", List.of(new PlanItem("i-7", ItemType.SLIDE, "Oração", null,
+                        new Slide("Oração", null), null, null, null, new Message.SlideStyle(media, "#ffd27a", 130)))),
                 new Prepare("e-2", "Culto", List.of(new PlanItem("i-9", ItemType.SONG, "Castelo Forte", null, null,
                         new SongContent("Castelo Forte",
                                 List.of(new SongSlide("Estrofe 1", false, List.of("Castelo forte", "é nosso Deus"), null),

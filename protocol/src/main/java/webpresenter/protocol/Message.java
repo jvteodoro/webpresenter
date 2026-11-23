@@ -178,23 +178,32 @@ public sealed interface Message {
      *     images, songs without audio); null = silence. Items with sound duck or stop it.
      */
     record PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide, SongContent song,
-            BackgroundMusic background, TimerContent timer) {
+            BackgroundMusic background, TimerContent timer, SlideStyle style) {
+
+        public PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide, SongContent song,
+                BackgroundMusic background, TimerContent timer) {
+            this(itemId, type, title, media, slide, song, background, timer, null);
+        }
 
         public PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide) {
-            this(itemId, type, title, media, slide, null, null, null);
+            this(itemId, type, title, media, slide, null, null, null, null);
         }
 
         public PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide, SongContent song) {
-            this(itemId, type, title, media, slide, song, null, null);
+            this(itemId, type, title, media, slide, song, null, null, null);
         }
 
         public PlanItem(String itemId, ItemType type, String title, MediaRef media, Slide slide, SongContent song,
                 BackgroundMusic background) {
-            this(itemId, type, title, media, slide, song, background, null);
+            this(itemId, type, title, media, slide, song, background, null, null);
         }
 
         public PlanItem withBackground(BackgroundMusic music) {
-            return new PlanItem(itemId, type, title, media, slide, song, music, timer);
+            return new PlanItem(itemId, type, title, media, slide, song, music, timer, style);
+        }
+
+        public PlanItem withStyle(SlideStyle slideStyle) {
+            return new PlanItem(itemId, type, title, media, slide, song, background, timer, slideStyle);
         }
     }
 
@@ -211,6 +220,15 @@ public sealed interface Message {
             signals = signals == null ? List.of() : List.copyOf(signals);
         }
     }
+
+    /**
+     * How a text slide or a song's lyrics look (already resolved: item over event over song).
+     *
+     * @param background image behind the text (downloaded with the event), or null for the default
+     * @param textColor "#rrggbb", or null for white
+     * @param textScale percent of the default text size (100 = default)
+     */
+    record SlideStyle(MediaRef background, String textColor, int textScale) {}
 
     /** @param beforeEndMs 0 = at the end */
     record TimerSignal(long beforeEndMs, MediaRef sound) {}

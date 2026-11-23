@@ -1,4 +1,4 @@
-export type JobType = 'YOUTUBE_IMPORT' | 'SEPARATE_PLAYBACK';
+export type JobType = 'YOUTUBE_IMPORT' | 'SEPARATE_PLAYBACK' | 'TRANSCRIBE_LYRICS';
 export type JobStatus = 'QUEUED' | 'RUNNING' | 'DONE' | 'FAILED' | 'CANCELLED';
 export type ImportTarget = 'MEDIA' | 'BACKGROUND_MUSIC' | 'SOUND_EFFECT' | 'SONG';
 export type ImportFormat = 'AUDIO' | 'VIDEO';
@@ -32,6 +32,7 @@ export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
 export const JOB_TYPE_ICONS: Record<JobType, string> = {
   YOUTUBE_IMPORT: 'download',
   SEPARATE_PLAYBACK: 'graphic_eq',
+  TRANSCRIBE_LYRICS: 'subtitles',
 };
 
 export const IMPORT_TARGET_LABELS: Record<ImportTarget, string> = {

@@ -135,6 +135,34 @@ class JobService {
         return view(job);
     }
 
+    /**
+     * Finds the lyrics' times in a sung recording; transcribes the lyrics too when the song has
+     * none yet. Results are drafts to review.
+     */
+    @Transactional
+    JobView transcribeLyrics(UUID songId, UUID recordingId, String user) {
+        var song = songs.find(songId).orElseThrow(() -> new NotFoundException("song " + songId + " not found"));
+        var recording = song.recording(recordingId)
+                .orElseThrow(() -> new InvalidJobException("recording " + recordingId + " is not a recording of this song"));
+        if (recording.kind() == RecordingKind.PLAYBACK) {
+            throw new InvalidJobException("choose a recording with vocals (sung)");
+        }
+        List<String> slides = pipeline.slideTexts(songId);
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("songId", songId.toString());
+        params.put("recordingId", recordingId.toString());
+        params.put("mediaId", recording.mediaId().toString());
+        params.put("language", "pt");
+        if (!slides.isEmpty()) {
+            params.put("slides", slides);
+        }
+        Job job = jobs.save(new Job(JobType.TRANSCRIBE_LYRICS,
+                (slides.isEmpty() ? "Letra e tempos · " : "Tempos da letra · ") + song.title(),
+                json.writeValueAsString(params), user, clock.instant()));
+        enqueue(job);
+        return view(job);
+    }
+
     @Transactional
     JobView cancel(UUID id) {
         Job job = find(id);
@@ -214,6 +242,7 @@ class JobService {
             Map<String, Object> result = switch (job.type()) {
                 case YOUTUBE_IMPORT -> registerImport(job, params, temp, filename, event.title());
                 case SEPARATE_PLAYBACK -> registerPlayback(job, params, temp, filename);
+                case TRANSCRIBE_LYRICS -> registerLyrics(params, temp);
             };
             job.done(json.writeValueAsString(result), "Concluído", clock.instant());
         } catch (RuntimeException | IOException e) {
@@ -265,12 +294,36 @@ class JobService {
         return Map.of("mediaId", media.id().toString(), "songId", songId.toString(), "recordingId", playback.toString());
     }
 
+    /** The worker's JSON: {"mode", "lyrics"?, "cues": [{"slide", "startMs"}], "confidence"?}. */
+    private Map<String, Object> registerLyrics(Map<String, Object> params, Path file) throws IOException {
+        tools.jackson.databind.JsonNode found = json.readTree(Files.readString(file));
+        UUID songId = UUID.fromString((String) params.get("songId"));
+        UUID recordingId = UUID.fromString((String) params.get("recordingId"));
+        var lyrics = found.get("lyrics");
+        List<SongPipeline.GeneratedCue> cues = new java.util.ArrayList<>();
+        for (var cue : found.get("cues")) {
+            cues.add(new SongPipeline.GeneratedCue(cue.get("slide").asInt(), cue.get("startMs").asLong()));
+        }
+        int slides = pipeline.applyGeneratedLyrics(songId, recordingId,
+                lyrics == null || lyrics.isNull() ? null : json.writeValueAsString(lyrics), cues);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("songId", songId.toString());
+        result.put("mode", found.path("mode").asString(""));
+        result.put("slides", slides);
+        result.put("timedSlides", cues.size());
+        var confidence = found.get("confidence");
+        if (confidence != null && !confidence.isNull()) {
+            result.put("confidence", confidence.asDouble());
+        }
+        return result;
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private void enqueue(Job job) {
         Map<String, Object> params = json.readValue(job.params(), MAP);
         String inputUrl = null;
-        if (job.type() == JobType.SEPARATE_PLAYBACK) {
+        if (job.type() == JobType.SEPARATE_PLAYBACK || job.type() == JobType.TRANSCRIBE_LYRICS) {
             inputUrl = catalog.workerDownloadUrl(UUID.fromString((String) params.get("mediaId"))).url().toString();
         }
         var request = new WorkerMessages.JobRequest(job.id(), job.attempt(), job.type(), params, inputUrl,

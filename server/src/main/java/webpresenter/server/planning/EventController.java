@@ -146,6 +146,21 @@ class EventController {
         return detail(planning.setItemBackground(id, itemId, request.source()));
     }
 
+    /** Slide appearance of the event: background image, text colour and size (null fields: the songs' own). */
+    @PutMapping("/{id}/style")
+    @PreAuthorize(CAN_EDIT)
+    EventDetail setEventStyle(@PathVariable UUID id, @RequestBody webpresenter.server.songs.SlideStyle style) {
+        return detail(planning.setEventStyle(id, style));
+    }
+
+    /** Slide appearance of an item (null fields inherit the event's, then the song's). */
+    @PutMapping("/{id}/items/{itemId}/style")
+    @PreAuthorize(CAN_EDIT)
+    EventDetail setItemStyle(@PathVariable UUID id, @PathVariable UUID itemId,
+            @RequestBody webpresenter.server.songs.SlideStyle style) {
+        return detail(planning.setItemStyle(id, itemId, style));
+    }
+
     /** Background music of the event ({@code source} null: the platform's). */
     @PutMapping("/{id}/background")
     @PreAuthorize(CAN_EDIT)
@@ -228,10 +243,20 @@ class EventController {
                 }).orElse(new SongView(i.songId(), "(música removida)", 0, null, null, false, null, List.of()));
                 yield new ItemView(i.id(), i.type(), song.title(), null, null, song, null, background(i.background()), null, null);
             }
-        }).toList();
+        }).map(view -> event.items().stream().filter(i -> i.id().equals(view.id())).findFirst()
+                .map(i -> view.withStyle(styleView(planning.style(i.slideStyle())))).orElse(view)).toList();
         return new EventDetail(event.id(), event.title(), event.startsAt(), event.current(), items,
                 event.createdBy(), event.updatedAt(), background(event.background()), event.templateId(),
-                event.templateDate(), event.pendingSlots());
+                event.templateDate(), event.pendingSlots(), styleView(planning.style(event.slideStyle())));
+    }
+
+    private StyleView styleView(webpresenter.server.songs.SlideStyle style) {
+        if (style == null || style.isEmpty()) {
+            return null;
+        }
+        var image = style.backgroundMediaId() == null ? null : catalog.find(style.backgroundMediaId()).orElse(null);
+        return new StyleView(style.backgroundMediaId(), image == null ? null : image.title(),
+                image == null ? null : catalog.downloadUrl(image.id()).url().toString(), style.textColor(), style.textScale());
     }
 
     private BackgroundView background(webpresenter.server.playlists.BackgroundSource source) {
@@ -284,18 +309,34 @@ class EventController {
     /** @param background the event's own background music, or null (platform default) */
     record EventDetail(UUID id, String title, Instant startsAt, boolean current, List<ItemView> items,
             String createdBy, Instant updatedAt, BackgroundView background, UUID templateId,
-            java.time.LocalDate templateDate, long pendingSlots) {}
+            java.time.LocalDate templateDate, long pendingSlots, StyleView style) {}
 
     /** @param background the item's (or scene's) own background music, or null (inherited) */
-    /** @param slotKind for a variable slot not filled yet: what it expects */
+    /**
+     * @param slotKind for a variable slot not filled yet: what it expects
+     * @param style the item's own slide appearance (null fields inherit)
+     */
     record ItemView(UUID id, ItemType type, String title, MediaView media, SlideView slide, SongView song,
-            SceneView scene, BackgroundView background, String label, TimerView timer, ItemSpec.SlotKind slotKind) {
+            SceneView scene, BackgroundView background, String label, TimerView timer, ItemSpec.SlotKind slotKind,
+            StyleView style) {
 
         ItemView(UUID id, ItemType type, String title, MediaView media, SlideView slide, SongView song,
                 SceneView scene, BackgroundView background, String label, TimerView timer) {
-            this(id, type, title, media, slide, song, scene, background, label, timer, null);
+            this(id, type, title, media, slide, song, scene, background, label, timer, null, null);
+        }
+
+        ItemView(UUID id, ItemType type, String title, MediaView media, SlideView slide, SongView song,
+                SceneView scene, BackgroundView background, String label, TimerView timer, ItemSpec.SlotKind slotKind) {
+            this(id, type, title, media, slide, song, scene, background, label, timer, slotKind, null);
+        }
+
+        ItemView withStyle(StyleView style) {
+            return new ItemView(id, type, title, media, slide, song, scene, background, label, timer, slotKind, style);
         }
     }
+
+    /** @param backgroundTitle and {@code backgroundUrl}: the background image, for display */
+    record StyleView(UUID backgroundMediaId, String backgroundTitle, String backgroundUrl, String textColor, Integer textScale) {}
 
     /** A song item: chosen recording (null: lyrics only) and the recordings available. */
     record SongView(UUID id, String title, int slideCount, UUID recordingId, String recordingKind, boolean timed,

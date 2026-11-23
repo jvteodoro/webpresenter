@@ -73,7 +73,15 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
 
     /** Everything a song is made of, as accepted by create, update and import. */
     record SongInput(String title, String alternativeTitles, String language, String authors, String copyright,
-            UUID backgroundMediaId, SongStatus status, Lyrics lyrics, List<CollectionInput> collections) {}
+            UUID backgroundMediaId, SongStatus status, Lyrics lyrics, List<CollectionInput> collections, String textColor,
+            Integer textScale) {
+
+        SongInput(String title, String alternativeTitles, String language, String authors, String copyright,
+                UUID backgroundMediaId, SongStatus status, Lyrics lyrics, List<CollectionInput> collections) {
+            this(title, alternativeTitles, language, authors, copyright, backgroundMediaId, status, lyrics, collections,
+                    null, null);
+        }
+    }
 
     record CollectionInput(String slug, String name, String group, String number) {}
 
@@ -141,6 +149,51 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
         song.addRecording(RecordingKind.SUNG, mediaId, Source.PIPELINE);
         songs.flush();
         return song.id();
+    }
+
+    @Override
+    @Transactional
+    public int applyGeneratedLyrics(UUID songId, UUID recordingId, String lyricsJson, List<GeneratedCue> cues) {
+        Song song = findSong(songId);
+        Recording target = song.recording(recordingId);
+        Instant now = clock.instant();
+        if (lyricsJson != null) {
+            Lyrics lyrics;
+            try {
+                lyrics = json.readValue(lyricsJson, Lyrics.class).validate();
+            } catch (RuntimeException e) {
+                throw new InvalidSongException("invalid generated lyrics: " + e.getMessage());
+            }
+            song.replaceLyrics(json.writeValueAsString(lyrics), now);
+            song.index(normalize(String.join(" ", song.title(),
+                    song.alternativeTitles() == null ? "" : song.alternativeTitles(), firstLines(lyrics))));
+        }
+        int slides = lyrics(song).slideSequence().size();
+        Timing timing = new Timing(song.lyricsVersion(), Source.PIPELINE, false,
+                cues.stream().map(c -> new Timing.Cue(c.slide(), c.startMs())).toList());
+        try {
+            timing.validate(slides);
+        } catch (IllegalArgumentException e) {
+            throw new InvalidSongException("invalid generated timing: " + e.getMessage());
+        }
+        String timingJson = json.writeValueAsString(timing);
+        target.setTiming(timingJson);
+        // Playbacks the pipeline made from this song have exactly the same timeline.
+        song.recordings().stream()
+                .filter(r -> r != target && r.kind() == RecordingKind.PLAYBACK && r.source() == Source.PIPELINE)
+                .forEach(r -> r.setTiming(timingJson));
+        song.markDraft(now);
+        songs.flush();
+        return slides;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> slideTexts(UUID songId) {
+        Lyrics lyrics = lyrics(findSong(songId));
+        var sequence = lyrics.slideSequence();
+        boolean hasText = sequence.stream().anyMatch(sl -> !sl.lines().isEmpty());
+        return hasText ? sequence.stream().map(sl -> String.join("\n", sl.lines())).toList() : List.of();
     }
 
     @Override
@@ -218,7 +271,7 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
                 }
                 return new PlanRecording(r.id(), r.kind(), r.mediaId(), cues);
             }).toList();
-            return new SongPlan(song.id(), song.title(), slides, recordings, song.backgroundMediaId());
+            return new SongPlan(song.id(), song.title(), slides, recordings, song.backgroundMediaId(), song.style());
         });
     }
 
@@ -251,6 +304,11 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
         if (input.backgroundMediaId() != null) {
             requireMedia(input.backgroundMediaId(), MediaKind.IMAGE, MediaKind.VIDEO);
         }
+        try {
+            new SlideStyle(null, input.textColor(), input.textScale()).validate();
+        } catch (IllegalArgumentException e) {
+            throw new InvalidSongException(e.getMessage());
+        }
         Instant now = clock.instant();
         song.describe(input.title().strip(), blankToNull(input.alternativeTitles()), language(input),
                 blankToNull(input.authors()), blankToNull(input.copyright()), input.backgroundMediaId(),
@@ -262,6 +320,7 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
             throw new InvalidSongException("invalid lyrics: " + e.getMessage());
         }
         song.replaceLyrics(json.writeValueAsString(lyrics), now);
+        song.setText(input.textColor(), input.textScale());
         if (input.collections() != null) {
             song.setCollections(input.collections().stream()
                     .map(c -> new Song.CollectionInput(collection(c), blankToNull(c.number())))

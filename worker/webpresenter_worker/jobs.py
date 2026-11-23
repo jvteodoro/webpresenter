@@ -1,6 +1,7 @@
 """The job types. Each runs in a worker thread and reports through ``Reporter``."""
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -144,20 +145,15 @@ def youtube_import(job: JobRequest, workdir: Path, report: Reporter) -> Result:
 TQDM_PERCENT = re.compile(r"(\d{1,3})%\|")
 
 
-def separate_playback(job: JobRequest, workdir: Path, report: Reporter) -> Result:
-    if not job.input_url:
-        raise JobFailed("Trabalho sem arquivo de entrada")
-    source = workdir / "input"
-    report.progress(1, "Baixando a gravação")
-    download(job.input_url, source, report, 1, 8, "Baixando a gravação")
-
+def run_demucs(source: Path, workdir: Path, report: Reporter, start: int, end: int, label: str) -> dict[str, Path]:
+    """Splits vocals from the rest with Demucs; returns {"vocals": …, "no_vocals": …} (WAV)."""
     model = os.environ.get("DEMUCS_MODEL", "htdemucs")
     command = [sys.executable, "-m", "webpresenter_worker.demucs_runner", "--two-stems", "vocals", "-n", model,
                "-o", str(workdir / "out"), str(source)]
     device = os.environ.get("DEMUCS_DEVICE")  # cpu or cuda; default: cuda when available
     if device:
         command += ["-d", device]
-    report.progress(10, "Separando as vozes (pode levar alguns minutos)")
+    report.progress(start, f"{label} (pode levar alguns minutos)")
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
                                errors="replace")
     tail: list[str] = []
@@ -177,24 +173,80 @@ def separate_playback(job: JobRequest, workdir: Path, report: Reporter) -> Resul
             match = TQDM_PERCENT.search(line)
             if match:
                 pct = int(match.group(1))
-                report.progress(10 + pct * 78 // 100, f"Separando as vozes {pct}%")
+                report.progress(start + pct * (end - start) // 100, f"{label} {pct}%")
         else:
             buffer += char
     code = process.wait()
     report.check()
     if code != 0:
         raise JobFailed(f"O Demucs falhou: {_failure(code, tail)}")
+    stems = {p.stem: p for p in (workdir / "out").glob("*/*/*.wav")}
+    if "vocals" not in stems or "no_vocals" not in stems:
+        raise JobFailed("O Demucs não gerou as faixas separadas")
+    return stems
 
-    stems = list((workdir / "out").glob("*/*/no_vocals.*"))
-    if not stems:
-        raise JobFailed("O Demucs não gerou o acompanhamento")
+
+def separate_playback(job: JobRequest, workdir: Path, report: Reporter) -> Result:
+    if not job.input_url:
+        raise JobFailed("Trabalho sem arquivo de entrada")
+    source = workdir / "input"
+    report.progress(1, "Baixando a gravação")
+    download(job.input_url, source, report, 1, 8, "Baixando a gravação")
+    stems = run_demucs(source, workdir, report, 10, 88, "Separando as vozes")
     report.progress(90, "Codificando o playback")
     target = workdir / "playback.m4a"
-    encode = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(stems[0]), "-c:a", "aac", "-b:a", "192k",
+    encode = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(stems["no_vocals"]), "-c:a", "aac", "-b:a", "192k",
                              "-movflags", "+faststart", str(target)], capture_output=True, text=True)
     if encode.returncode != 0:
         raise JobFailed(f"Não foi possível codificar o playback: {encode.stderr.strip()[:300]}")
     return Result(target, "playback.m4a")
+
+
+# ---------------------------------------------------------------------- lyrics and timing
+
+def transcribe_lyrics(job: JobRequest, workdir: Path, report: Reporter) -> Result:
+    """
+    Lyrics and slide times from a sung recording: transcribed (song without lyrics) or aligned
+    (params.slides: the text of each slide of the song, in singing order).
+    """
+    from . import lyrics
+
+    if not job.input_url:
+        raise JobFailed("Trabalho sem arquivo de entrada")
+    source = workdir / "input"
+    report.progress(1, "Baixando a gravação")
+    download(job.input_url, source, report, 1, 5, "Baixando a gravação")
+
+    audio = source
+    if os.environ.get("LYRICS_SEPARATE", "1") != "0":
+        audio = run_demucs(source, workdir, report, 6, 45, "Isolando a voz")["vocals"]
+    report.check()
+
+    model = os.environ.get("WHISPER_MODEL", "medium")
+    language = job.params.get("language") or "pt"
+    report.progress(46, "Reconhecendo a letra")
+
+    def heard(fraction: float) -> None:
+        report.check()
+        report.progress(46 + int(fraction * 46), f"Reconhecendo a letra {int(fraction * 100)}%")
+
+    words = lyrics.recognize(str(audio), model, language, heard)
+    if not words:
+        raise JobFailed("Nenhuma palavra reconhecida na gravação")
+    report.progress(94, "Montando os slides")
+
+    known = job.params.get("slides")
+    if known:
+        cues, matched = lyrics.align(known, words)
+        if not cues:
+            raise JobFailed("A letra da música não foi encontrada na gravação")
+        result = {"mode": "aligned", "cues": cues, "confidence": round(matched, 2), "language": language}
+    else:
+        parsed, cues = lyrics.build_lyrics(words)
+        result = {"mode": "transcribed", "lyrics": parsed, "cues": cues, "confidence": None, "language": language}
+    target = workdir / "lyrics.json"
+    target.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    return Result(target, "lyrics.json")
 
 
 def _failure(code: int, tail: list[str]) -> str:
@@ -220,4 +272,5 @@ def _kill_on_cancel(process: subprocess.Popen, cancelled: threading.Event) -> No
             return
 
 
-HANDLERS = {"YOUTUBE_IMPORT": youtube_import, "SEPARATE_PLAYBACK": separate_playback}
+HANDLERS = {"YOUTUBE_IMPORT": youtube_import, "SEPARATE_PLAYBACK": separate_playback,
+            "TRANSCRIBE_LYRICS": transcribe_lyrics}

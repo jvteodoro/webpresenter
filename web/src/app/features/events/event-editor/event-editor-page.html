@@ -22,6 +22,7 @@
       <mat-menu #eventMenu="matMenu" xPosition="before">
         <button mat-menu-item (click)="editDetails()"><mat-icon>edit</mat-icon>Editar título e data</button>
         <button mat-menu-item (click)="chooseEventBackground()"><mat-icon>graphic_eq</mat-icon>Fundo musical do evento</button>
+        <button mat-menu-item (click)="chooseEventStyle()"><mat-icon>palette</mat-icon>Aparência dos slides do evento</button>
         <button mat-menu-item (click)="deleteEvent()"><mat-icon>delete</mat-icon>Excluir evento</button>
       </mat-menu>
     }
@@ -145,6 +146,9 @@
               @if (item.background) {
                 <span class="item-sub background"><mat-icon inline>graphic_eq</mat-icon> {{ item.background.name }}</span>
               }
+              @if (styleSummary(item.style); as look) {
+                <span class="item-sub background"><mat-icon inline>palette</mat-icon> {{ look }}</span>
+              }
             </span>
             <span class="item-meta">
               @if (item.type === 'SLOT') { }
@@ -199,6 +203,11 @@
                 @if (item.type === 'SCENE') {
                   <button mat-icon-button aria-label="Editar cena" matTooltip="Editar nome e horário" [disabled]="saving()" (click)="editScene(item)">
                     <mat-icon>edit</mat-icon>
+                  </button>
+                }
+                @if (item.type === 'SONG' || item.type === 'SLIDE') {
+                  <button mat-icon-button aria-label="Aparência" matTooltip="Aparência do slide" [disabled]="saving()" (click)="chooseItemStyle(item)">
+                    <mat-icon>palette</mat-icon>
                   </button>
                 }
                 <button mat-icon-button aria-label="Fundo musical" matTooltip="Fundo musical" [disabled]="saving()" (click)="chooseItemBackground(item)">

@@ -232,7 +232,17 @@ final class PlayerController implements ServerConnection.Listener {
                 songSlide = -1;
                 liveItem = item;
                 paused = false;
-                window.showSlide(item.slide().title(), item.slide().body());
+                applyTextStyle(item);
+                Message.MediaRef bg = item.style() == null ? null : item.style().background();
+                window.showSlide(item.slide().title(), item.slide().body(), bg == null ? null : cache.cached(bg).orElse(null));
+                if (bg != null && cache.cached(bg).isEmpty()) {
+                    // Not downloaded yet: show the text now, the background when it arrives.
+                    cache.fetch(bg).thenAccept(file -> Platform.runLater(() -> {
+                        if (seq == commandSeq && liveItem == item) {
+                            window.setSlideBackground(file);
+                        }
+                    }));
+                }
                 report(Message.PlaybackStatus.SHOWING, item.itemId(), null);
                 updateBackground();
             });
@@ -288,6 +298,7 @@ final class PlayerController implements ServerConnection.Listener {
                 liveItem = item;
                 paused = false;
                 int slide = command.slide() == null ? 0 : command.slide();
+                applyTextStyle(item);
                 window.showSong(files[1], files[0], files[0] == null ? 0 : command.startPositionMs());
                 songSlide = -1;
                 updateBackground();
@@ -384,6 +395,12 @@ final class PlayerController implements ServerConnection.Listener {
             positionReporter.playFromStart();
         }
         updateBackground();
+    }
+
+    /** Text colour and size of slides and lyrics, from the item's slide style. */
+    private void applyTextStyle(Message.PlanItem item) {
+        Message.SlideStyle style = item.style();
+        window.setTextStyle(style == null ? null : style.textColor(), style == null ? 100 : style.textScale());
     }
 
     /** A clock or a timer; the ticker keeps its text current and fires the timer's signals. */
@@ -638,7 +655,9 @@ final class PlayerController implements ServerConnection.Listener {
                     case MEDIA -> java.util.stream.Stream.ofNullable(i.media());
                     case SONG -> i.song() == null ? java.util.stream.Stream.<Message.MediaRef>empty()
                             : java.util.stream.Stream.of(i.song().audio(), i.song().background()).filter(java.util.Objects::nonNull);
-                    case SLIDE, CLOCK -> java.util.stream.Stream.<Message.MediaRef>empty();
+                    case SLIDE -> i.style() == null ? java.util.stream.Stream.<Message.MediaRef>empty()
+                            : java.util.stream.Stream.ofNullable(i.style().background());
+                    case CLOCK -> java.util.stream.Stream.<Message.MediaRef>empty();
                     case TIMER -> i.timer() == null ? java.util.stream.Stream.<Message.MediaRef>empty()
                             : i.timer().signals().stream().map(Message.TimerSignal::sound).distinct();
                 })

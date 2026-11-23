@@ -15,6 +15,7 @@
     </div>
     @if (currentUser.canEditSongs()) {
       <button mat-stroked-button (click)="editLyrics()"><mat-icon>edit</mat-icon>Editar letra</button>
+      <button mat-stroked-button (click)="editStyle()"><mat-icon>palette</mat-icon>Aparência dos slides</button>
     }
   </header>
 
@@ -43,25 +44,34 @@
           }
         </p>
       }
-      @if (playbackJob(); as job) {
-        @if (generating()) {
+      @for (job of songJobs(); track job.id) {
+        @if (job.status === 'QUEUED' || job.status === 'RUNNING') {
           <div class="generation" role="status">
             <span>
-              @if (job.status === 'QUEUED') { Playback sem voz na fila… }
-              @else { {{ job.message || 'Gerando playback sem voz' }} · {{ job.progress }}% }
+              @if (job.status === 'QUEUED') { Gerando {{ jobLabel(job) }}: na fila… }
+              @else { {{ job.message || 'Gerando ' + jobLabel(job) }} · {{ job.progress }}% }
             </span>
             <mat-progress-bar [mode]="job.status === 'QUEUED' ? 'query' : 'determinate'" [value]="job.progress" />
             <a routerLink="/fila">Ver fila</a>
           </div>
         } @else if (job.status === 'FAILED') {
-          <p class="generation-failed" role="alert"><mat-icon>error</mat-icon> A geração do playback falhou: {{ job.message }}. <a routerLink="/fila">Ver fila</a></p>
+          <p class="generation-failed" role="alert"><mat-icon>error</mat-icon> A geração de {{ jobLabel(job) }} falhou: {{ job.message }}. <a routerLink="/fila">Ver fila</a></p>
         }
       }
       @if (recording(); as r) {
-        @if (r.kind !== 'PLAYBACK' && currentUser.canEditSongs() && !generating()) {
-          <button mat-stroked-button class="generate" (click)="generatePlayback(r)">
-            <mat-icon>graphic_eq</mat-icon> Gerar playback sem voz
-          </button>
+        @if (r.kind !== 'PLAYBACK' && currentUser.canEditSongs()) {
+          <div class="generate-actions">
+            @if (!generating()) {
+              <button mat-stroked-button (click)="generatePlayback(r)">
+                <mat-icon>graphic_eq</mat-icon> Gerar playback sem voz
+              </button>
+            }
+            @if (!transcribing()) {
+              <button mat-stroked-button (click)="transcribe(r)">
+                <mat-icon>subtitles</mat-icon> {{ hasLyrics() ? 'Sincronizar letra com o áudio' : 'Gerar letra e tempos' }}
+              </button>
+            }
+          </div>
         }
       }
     </section>

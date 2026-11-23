@@ -197,7 +197,7 @@ class PlanningService implements PlannedEvents, MediaUsage {
             items.add(new EventPlan.Item(i.id(), i.type(), i.mediaId(), i.slideTitle(), i.slideBody(), i.songId(),
                     i.recordingId(), scene == null ? null
                             : new EventPlan.Scene(scene.id(), scene.sceneTitle(), scene.sceneStarts(), scene.sceneEnds()),
-                    background, i.label(), timer));
+                    background, i.label(), timer, style(i.slideStyle()).over(style(e.slideStyle()))));
         }
         return new EventPlan(e.id(), e.title(), items, e.background());
     }
@@ -299,6 +299,50 @@ class PlanningService implements PlannedEvents, MediaUsage {
         return loaded(event);
     }
 
+    webpresenter.server.songs.SlideStyle style(String stored) {
+        return stored == null ? webpresenter.server.songs.SlideStyle.NONE
+                : json.readValue(stored, webpresenter.server.songs.SlideStyle.class);
+    }
+
+    /** Validated and stored as JSON; an empty style (everything inherited) is stored as null. */
+    private String styleJson(webpresenter.server.songs.SlideStyle style) {
+        if (style == null || style.isEmpty()) {
+            return null;
+        }
+        try {
+            style.validate();
+        } catch (IllegalArgumentException e) {
+            throw new InvalidRequestException(e.getMessage());
+        }
+        if (style.backgroundMediaId() != null) {
+            var media = catalog.find(style.backgroundMediaId())
+                    .orElseThrow(() -> new InvalidRequestException("media " + style.backgroundMediaId() + " does not exist"));
+            if (media.kind() != webpresenter.server.library.MediaKind.IMAGE) {
+                throw new InvalidRequestException("the slide background must be an image");
+            }
+        }
+        return json.writeValueAsString(style);
+    }
+
+    /** Slide appearance of the event (null fields inherit the songs' own). */
+    @Transactional
+    PlannedEvent setEventStyle(UUID id, webpresenter.server.songs.SlideStyle style) {
+        PlannedEvent event = find(id);
+        event.setSlideStyle(styleJson(style), clock.instant());
+        changed(event);
+        return loaded(event);
+    }
+
+    /** Slide appearance of an item (null fields inherit the event's, then the song's). */
+    @Transactional
+    PlannedEvent setItemStyle(UUID id, UUID itemId, webpresenter.server.songs.SlideStyle style) {
+        PlannedEvent event = find(id);
+        event.item(itemId).setSlideStyle(styleJson(style));
+        event.touch(clock.instant());
+        changed(event);
+        return loaded(event);
+    }
+
     /** Validates the settings and returns the signals as stored (JSON). */
     private String signalsJson(TimerSettings settings) {
         if (settings == null || settings.mode() == null) {
@@ -391,6 +435,7 @@ class PlanningService implements PlannedEvents, MediaUsage {
         var events = new java.util.LinkedHashSet<PlannedEvent>(repository.findAllUsingMedia(mediaId));
         events.addAll(repository.findAllWithBackgroundMedia(mediaId));
         events.addAll(repository.findAllWithSignalSound("[{\"soundMediaId\":\"" + mediaId + "\"}]"));
+        events.addAll(repository.findAllWithStyleBackground("{\"backgroundMediaId\":\"" + mediaId + "\"}"));
         return events.stream().map(e -> "evento \"" + e.title() + "\"").toList();
     }
 

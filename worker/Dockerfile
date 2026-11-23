@@ -15,9 +15,10 @@ WORKDIR /app
 RUN pip install --no-cache-dir torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
 COPY pyproject.toml ./
 COPY webpresenter_worker ./webpresenter_worker
-RUN pip install --no-cache-dir ".[separation]"
+RUN pip install --no-cache-dir ".[separation,lyrics]"
 
-ENV TORCH_HOME=/models WORK_DIR=/work PYTHONUNBUFFERED=1
+# Models (Demucs, Whisper) are downloaded on first use into the /models volume.
+ENV TORCH_HOME=/models HF_HOME=/models/huggingface WORK_DIR=/work PYTHONUNBUFFERED=1
 RUN useradd --create-home --uid 10001 worker && mkdir -p /models /work && chown worker /models /work
 USER worker
 CMD ["webpresenter-worker"]

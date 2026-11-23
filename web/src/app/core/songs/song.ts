@@ -96,6 +96,9 @@ export interface SongDetail {
   origin: string | null;
   externalId: string | null;
   background: MediaRef | null;
+  /** Default text colour ("#rrggbb") and size (percent) of this song's slides; null = platform default. */
+  textColor: string | null;
+  textScale: number | null;
   collections: CollectionRef[];
   lyrics: Lyrics;
   lyricsVersion: number;
@@ -121,6 +124,8 @@ export interface SongInput {
   status: SongStatus;
   lyrics: Lyrics;
   collections: { slug: string; name: string; group: string | null; number: string | null }[];
+  textColor: string | null;
+  textScale: number | null;
 }
 
 export const RECORDING_LABELS: Record<RecordingKind, string> = {
@@ -140,6 +145,8 @@ export function inputOf(song: SongDetail, changes: Partial<SongInput> = {}): Son
     status: song.status,
     lyrics: song.lyrics,
     collections: song.collections.map((c) => ({ slug: c.slug, name: c.name, group: c.group, number: c.number })),
+    textColor: song.textColor ?? null,
+    textScale: song.textScale ?? null,
     ...changes,
   };
 }

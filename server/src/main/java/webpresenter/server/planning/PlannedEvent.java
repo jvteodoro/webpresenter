@@ -56,6 +56,11 @@ class PlannedEvent {
     @jakarta.persistence.AttributeOverride(name = "ref", column = @Column(name = "background_ref"))
     private webpresenter.server.playlists.BackgroundSource background;
 
+    /** Slide appearance of the event (JSON SlideStyle), or null: songs keep their own. */
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(name = "slide_style")
+    private String slideStyle;
+
     /** The liturgy template this event was made from (and for which date), if any. */
     @Column(name = "template_id")
     private UUID templateId;
@@ -116,6 +121,11 @@ class PlannedEvent {
         touch(now);
     }
 
+    void setSlideStyle(String json, Instant now) {
+        this.slideStyle = json;
+        touch(now);
+    }
+
     void fromTemplate(UUID templateId, java.time.LocalDate date) {
         this.templateId = templateId;
         this.templateDate = date;
@@ -157,6 +167,7 @@ class PlannedEvent {
     Instant updatedAt() { return updatedAt; }
     webpresenter.server.playlists.BackgroundSource background() { return background; }
     UUID templateId() { return templateId; }
+    String slideStyle() { return slideStyle; }
     java.time.LocalDate templateDate() { return templateDate; }
     long pendingSlots() { return items.stream().filter(i -> i.type() == ItemType.SLOT).count(); }
 }

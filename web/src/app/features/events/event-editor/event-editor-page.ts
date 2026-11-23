@@ -17,6 +17,8 @@ import { EventDetail, EventInput, EventItem, Readiness, SceneInput, SlideInput }
 import { BackgroundView } from '../../../core/audio/background';
 import { BackgroundChoice, BackgroundPickerData, BackgroundPickerDialog } from '../../audio/background-picker-dialog';
 import { SceneDialog } from '../dialogs/scene-dialog';
+import { SlideStyleDialog, SlideStyleDialogData } from '../../slides/slide-style-dialog';
+import { SlideStyle, StyleView } from '../../../core/events/event';
 import { ItemSpecPicker } from '../../liturgy/item-spec-picker';
 import { ItemSpec } from '../../../core/liturgy/liturgy';
 import { TimerDialog, TimerDialogData, TimerDialogResult } from '../dialogs/timer-dialog';
@@ -239,6 +241,41 @@ export class EventEditorPage {
     return { SONG: 'Escolha uma música', MEDIA: 'Escolha uma mídia', SLIDE: 'Escreva o slide', ANY: 'Escolha uma música, mídia ou slide' }[
       item.slotKind ?? 'ANY'
     ];
+  }
+
+  /** Slide look of the whole event; unset fields keep each song's own. */
+  protected chooseEventStyle(): void {
+    const current = this.event();
+    if (current) {
+      this.pickStyle('Aparência dos slides do evento', current.style ?? null, 'o padrão de cada música',
+        (style) => this.api.setEventStyle(current.id, style));
+    }
+  }
+
+  /** Slide look of a song or text slide; unset fields come from the event, then the song. */
+  protected chooseItemStyle(item: EventItem): void {
+    this.pickStyle(`Aparência de "${item.title}"`, item.style ?? null,
+      item.type === 'SONG' ? 'o do evento (ou da música)' : 'o do evento',
+      (style) => this.api.setItemStyle(this.id(), item.id, style));
+  }
+
+  protected styleSummary(style: StyleView | null | undefined): string {
+    if (!style) {
+      return '';
+    }
+    return [style.backgroundTitle ? `fundo ${style.backgroundTitle}` : null, style.textColor ? 'cor própria' : null,
+      style.textScale ? `texto ${style.textScale}%` : null].filter(Boolean).join(' · ');
+  }
+
+  private pickStyle(title: string, current: StyleView | null, inheritLabel: string,
+                    save: (style: SlideStyle) => Observable<EventDetail>): void {
+    this.dialog
+      .open<SlideStyleDialog, SlideStyleDialogData, SlideStyle>(SlideStyleDialog, {
+        data: { title, current, currentBackgroundUrl: current?.backgroundUrl ?? null, inheritLabel },
+      })
+      .afterClosed()
+      .pipe(filter((style): style is SlideStyle => !!style))
+      .subscribe((style) => this.run(save(style), 'trocar a aparência'));
   }
 
   protected addClock(): void {

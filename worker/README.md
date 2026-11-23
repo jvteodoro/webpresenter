@@ -10,7 +10,7 @@ Processes the jobs queued by the server: **YouTube import** (yt-dlp) and **vocal
 cd worker
 uv venv --python 3.12 .venv
 uv pip install --python .venv/bin/python torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
-uv pip install --python .venv/bin/python -e ".[separation]"
+uv pip install --python .venv/bin/python -e ".[separation,lyrics]"
 .venv/bin/webpresenter-worker          # RabbitMQ from deploy/compose.yaml on localhost:5672
 ```
 
@@ -25,6 +25,8 @@ It runs on CPU (several minutes per song) or on an NVIDIA GPU when PyTorch has C
 | `WORK_DIR` | system temp | scratch files (removed after each job) |
 | `DEMUCS_MODEL` | `htdemucs` | `htdemucs_ft` is better and 4× slower |
 | `DEMUCS_DEVICE` | `cuda` if available | `cpu` or `cuda` |
+| `WHISPER_MODEL` | `medium` | lyrics recognition (`small` is faster, `large-v3` better and slower) |
+| `LYRICS_SEPARATE` | `1` | isolate the vocals with Demucs before recognizing (`0` skips it) |
 
 ## Protocol
 

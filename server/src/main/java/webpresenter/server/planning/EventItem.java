@@ -80,6 +80,11 @@ class EventItem {
     @Column(name = "timer_signals")
     private String timerSignals;
 
+    /** Slide appearance of this item (JSON SlideStyle), or null: inherits. */
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(name = "slide_style")
+    private String slideStyle;
+
     @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
     @Column(name = "slot_kind")
     private ItemSpec.SlotKind slotKind;
@@ -208,4 +213,9 @@ class EventItem {
     Integer timerDurationSeconds() { return timerDurationSeconds; }
     String timerSignals() { return timerSignals; }
     ItemSpec.SlotKind slotKind() { return slotKind; }
+    String slideStyle() { return slideStyle; }
+
+    void setSlideStyle(String json) {
+        this.slideStyle = json;
+    }
 }

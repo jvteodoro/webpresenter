@@ -11,6 +11,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { filter, switchMap } from 'rxjs';
 import { CurrentUser } from '../../../core/auth/current-user';
+import { SlideStyle } from '../../../core/events/event';
+import { SlideStyleDialog, SlideStyleDialogData } from '../../slides/slide-style-dialog';
 import { Job, isActive } from '../../../core/jobs/job';
 import { JobsApi } from '../../../core/jobs/jobs-api';
 import { JobsStream } from '../../../core/jobs/jobs-stream';
@@ -49,15 +51,21 @@ export class SongPage {
   private readonly jobsApi = inject(JobsApi);
   private readonly jobs = inject(JobsStream);
 
-  /** The latest playback generation of this song (queued, running or just finished), if any. */
-  protected readonly playbackJob = computed<Job | null>(
-    () =>
-      this.jobs.jobs().find((j) => j.type === 'SEPARATE_PLAYBACK' && j.params['songId'] === this.id()) ?? null,
-  );
-  protected readonly generating = computed(() => {
-    const job = this.playbackJob();
-    return job !== null && isActive(job);
+  /** The latest job of each kind for this song (playback generation, lyrics), newest first. */
+  protected readonly songJobs = computed<Job[]>(() => {
+    const latest = new Map<string, Job>();
+    for (const j of this.jobs.jobs()) {
+      if ((j.type === 'SEPARATE_PLAYBACK' || j.type === 'TRANSCRIBE_LYRICS') && j.params['songId'] === this.id()
+          && !latest.has(j.type)) {
+        latest.set(j.type, j);
+      }
+    }
+    return [...latest.values()];
   });
+  protected readonly generating = computed(() => this.songJobs().some((j) => j.type === 'SEPARATE_PLAYBACK' && isActive(j)));
+  protected readonly transcribing = computed(() => this.songJobs().some((j) => j.type === 'TRANSCRIBE_LYRICS' && isActive(j)));
+  /** The song has real lyrics (not only the instrumental placeholder of a download). */
+  protected readonly hasLyrics = computed(() => (this.song()?.slideSequence ?? []).some((s) => s.lines.length > 0));
   /** Generations seen in progress on this page; when one of them is done the song is reloaded. */
   private readonly followed = new Set<string>();
 
@@ -91,15 +99,17 @@ export class SongPage {
   constructor() {
     this.jobs.attach();
     this.destroyRef.onDestroy(() => this.jobs.detach());
-    // When a playback generation finishes, the new recording appears.
+    // When a generation finishes (playback, lyrics), the song is reloaded to show its result.
     effect(() => {
-      const job = this.playbackJob();
-      if (!job) {
-        return;
+      let finished = false;
+      for (const job of this.songJobs()) {
+        if (isActive(job)) {
+          this.followed.add(job.id);
+        } else if (this.followed.delete(job.id) && job.status === 'DONE') {
+          finished = true;
+        }
       }
-      if (isActive(job)) {
-        this.followed.add(job.id);
-      } else if (this.followed.delete(job.id) && job.status === 'DONE') {
+      if (finished) {
         untracked(() => this.load(this.id()));
       }
     });
@@ -175,6 +185,56 @@ export class SongPage {
       error: (e: HttpErrorResponse) =>
         this.snackBar.open(e.error?.detail ?? `Não foi possível gerar (${e.status}).`, 'OK', { duration: 5000 }),
     });
+  }
+
+  /** The song's own slide look: its background (as imported or chosen), text colour and size. */
+  protected editStyle(): void {
+    const song = this.song();
+    if (!song) {
+      return;
+    }
+    this.dialog
+      .open<SlideStyleDialog, SlideStyleDialogData, SlideStyle>(SlideStyleDialog, {
+        data: {
+          title: 'Aparência dos slides desta música',
+          current: { backgroundMediaId: song.background?.id ?? null, textColor: song.textColor, textScale: song.textScale },
+          currentBackgroundUrl: this.backgroundUrl(),
+        },
+      })
+      .afterClosed()
+      .pipe(
+        filter((style): style is SlideStyle => !!style),
+        switchMap((style) => this.api.update(song.id, inputOf(song, {
+          backgroundMediaId: style.backgroundMediaId,
+          textColor: style.textColor,
+          textScale: style.textScale,
+        }))),
+      )
+      .subscribe({
+        next: () => {
+          this.load(song.id);
+          this.snackBar.open('Aparência salva. Vale onde o evento ou o item não definirem outra.', 'OK', { duration: 4000 });
+        },
+        error: (e: HttpErrorResponse) =>
+          this.snackBar.open(e.error?.detail ?? `Não foi possível salvar (${e.status}).`, 'OK', { duration: 5000 }),
+      });
+  }
+
+  protected transcribe(recording: Recording): void {
+    this.jobsApi.transcribeLyrics(this.id(), recording.id).subscribe({
+      next: (job) => {
+        this.jobs.apply(job);
+        this.snackBar.open(
+          this.hasLyrics() ? 'Sincronização da letra na fila.' : 'Geração da letra e dos tempos na fila. Isso leva alguns minutos.',
+          'OK', { duration: 5000 });
+      },
+      error: (e: HttpErrorResponse) =>
+        this.snackBar.open(e.error?.detail ?? `Não foi possível gerar (${e.status}).`, 'OK', { duration: 5000 }),
+    });
+  }
+
+  protected jobLabel(job: Job): string {
+    return job.type === 'SEPARATE_PLAYBACK' ? 'playback sem voz' : 'letra e tempos';
   }
 
   private load(id: string): void {
