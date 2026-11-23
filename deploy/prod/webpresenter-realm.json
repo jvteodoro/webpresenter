@@ -43,14 +43,14 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "redirectUris": [
-        "${WEBPRESENTER_PUBLIC_URL}/*"
+        "/*"
       ],
       "webOrigins": [
-        "${WEBPRESENTER_PUBLIC_URL}"
+        "+"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "${WEBPRESENTER_PUBLIC_URL}/*"
+        "post.logout.redirect.uris": "+"
       }
     },
     {

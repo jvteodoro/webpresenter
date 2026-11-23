@@ -2,16 +2,12 @@
 server:
   forward-headers-strategy: framework
 
-spring:
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          # Tokens are issued for the public URL; keys are fetched over the internal network.
-          issuer-uri: ${WEBPRESENTER_OIDC_ISSUER}
-          jwk-set-uri: ${WEBPRESENTER_OIDC_JWKS}
-
 webpresenter:
+  oidc:
+    # Keycloak names itself after the address the browser used (the LAN address may change):
+    # tokens are accepted for this realm path on any host, signed with keys fetched internally.
+    issuer-path: /auth/realms/webpresenter
+    jwk-set-uri: ${WEBPRESENTER_OIDC_JWKS}
   cors:
     # Same origin in production.
     allowed-origins: ${WEBPRESENTER_CORS_ORIGINS:}

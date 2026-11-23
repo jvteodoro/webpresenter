@@ -61,14 +61,26 @@ public final class MediaCache implements AutoCloseable {
     }
 
     public MediaCache(Path dir) {
+        this(dir, url -> java.net.URI.create(url));
+    }
+
+    /** @param links resolves the server's links (relative ones, like "/s3/…", against its current address) */
+    public MediaCache(Path dir, java.util.function.Function<String, java.net.URI> links) {
         this(dir, HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
-                .followRedirects(HttpClient.Redirect.NORMAL).build());
+                .followRedirects(HttpClient.Redirect.NORMAL).build(), links);
     }
 
     MediaCache(Path dir, HttpClient http) {
+        this(dir, http, url -> java.net.URI.create(url));
+    }
+
+    MediaCache(Path dir, HttpClient http, java.util.function.Function<String, java.net.URI> links) {
         this.dir = dir;
         this.http = http;
+        this.links = links;
     }
+
+    private final java.util.function.Function<String, java.net.URI> links;
 
     /** The verified local file, if already downloaded. */
     public Optional<Path> cached(MediaRef media) {
@@ -114,7 +126,7 @@ public final class MediaCache implements AutoCloseable {
         try {
             Files.createDirectories(dir);
             HttpResponse<InputStream> response = http.send(
-                    HttpRequest.newBuilder(URI.create(media.url())).timeout(Duration.ofMinutes(30)).build(),
+                    HttpRequest.newBuilder(links.apply(media.url())).timeout(Duration.ofMinutes(30)).build(),
                     HttpResponse.BodyHandlers.ofInputStream());
             if (response.statusCode() != 200) {
                 response.body().close();

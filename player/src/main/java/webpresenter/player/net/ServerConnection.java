@@ -44,7 +44,8 @@ public final class ServerConnection implements AutoCloseable {
     /** Reason passed to {@link Listener#onDisconnected} when a newer connection replaced this one. */
     public static final String REPLACED = "REPLACED";
 
-    private final URI endpoint;
+    private final ServerAddress address;
+    private volatile URI endpoint;
     private final ProtocolCodec codec;
     private final Supplier<Message.Hello> hello;
     private final Listener listener;
@@ -59,7 +60,12 @@ public final class ServerConnection implements AutoCloseable {
     private ScheduledFuture<?> pinger;
 
     public ServerConnection(URI serverUrl, ProtocolCodec codec, Supplier<Message.Hello> hello, Listener listener) {
-        this.endpoint = toWebSocket(serverUrl);
+        this(ServerAddress.fixed(serverUrl), codec, hello, listener);
+    }
+
+    /** The server's address is resolved again before every connection attempt (it may have moved). */
+    public ServerConnection(ServerAddress address, ProtocolCodec codec, Supplier<Message.Hello> hello, Listener listener) {
+        this.address = address;
         this.codec = codec;
         this.hello = hello;
         this.listener = listener;
@@ -95,12 +101,19 @@ public final class ServerConnection implements AutoCloseable {
         if (closed) {
             return;
         }
+        URI base = address.resolve();
+        if (base == null) {
+            scheduleReconnect("server not found on the network");
+            return;
+        }
+        endpoint = toWebSocket(base);
         LOG.log(System.Logger.Level.INFO, "connecting to {0}", endpoint);
         http.newWebSocketBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .buildAsync(endpoint, new SocketListener())
                 .whenComplete((ws, error) -> {
                     if (error != null) {
+                        address.failed(); // an automatic address is looked up again
                         scheduleReconnect("cannot connect: " + rootMessage(error));
                     }
                 });

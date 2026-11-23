@@ -26,6 +26,8 @@ class S3MediaStore implements MediaStore, ApplicationRunner {
     private final S3Presigner playerPresigner;
     private final S3Presigner workerPresigner;
     private final String bucket;
+    /** Prefix of relative links for browsers and players, or null for absolute links. */
+    private final String linkPrefix;
 
     S3MediaStore(S3Client s3, @org.springframework.beans.factory.annotation.Qualifier("s3Presigner") S3Presigner presigner,
             @org.springframework.beans.factory.annotation.Qualifier("s3PlayerPresigner") S3Presigner playerPresigner,
@@ -36,6 +38,8 @@ class S3MediaStore implements MediaStore, ApplicationRunner {
         this.presigner = presigner;
         this.playerPresigner = playerPresigner;
         this.bucket = props.bucket();
+        this.linkPrefix = props.linkPrefix() == null || props.linkPrefix().isBlank() ? null
+                : props.linkPrefix().replaceAll("/+$", "");
     }
 
     /** Creates the media bucket on first start. */
@@ -56,12 +60,22 @@ class S3MediaStore implements MediaStore, ApplicationRunner {
 
     @Override
     public PresignedUrl presignedDownload(String key, Duration validity) {
-        return presign(presigner, key, validity);
+        return relative(presign(presigner, key, validity));
     }
 
     @Override
     public PresignedUrl presignedPlayerDownload(String key, Duration validity) {
-        return presign(playerPresigner, key, validity);
+        return relative(presign(playerPresigner, key, validity));
+    }
+
+    /** "/s3/media/…?X-Amz-…" instead of "http://webpresenter-s3/media/…?X-Amz-…" when configured. */
+    private PresignedUrl relative(PresignedUrl link) {
+        if (linkPrefix == null) {
+            return link;
+        }
+        URI absolute = link.url();
+        String relative = linkPrefix + absolute.getRawPath() + (absolute.getRawQuery() == null ? "" : "?" + absolute.getRawQuery());
+        return new PresignedUrl(URI.create(relative), link.expiresAt());
     }
 
     @Override

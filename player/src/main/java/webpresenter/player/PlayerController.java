@@ -32,7 +32,8 @@ final class PlayerController implements ServerConnection.Listener {
     private final PlayerIdentity identity;
     private final MediaCache cache;
     private final PreCache preCache;
-    private final String serverLabel;
+    /** Where the server is (or that it is being looked for), for the information screens. */
+    private final java.util.function.Supplier<String> serverLabel;
     private final AtomicReference<ServerConnection> connection = new AtomicReference<>();
     private final Runnable onStateChanged;
     private final Timeline positionReporter;
@@ -66,7 +67,8 @@ final class PlayerController implements ServerConnection.Listener {
     private final BackgroundMusicPlayer music;
     private webpresenter.player.engine.mpv.MpvAudio musicOutput;
 
-    PlayerController(PresentationWindow window, PlayerIdentity identity, MediaCache cache, String serverLabel,
+    PlayerController(PresentationWindow window, PlayerIdentity identity, MediaCache cache,
+            java.util.function.Supplier<String> serverLabel,
             Runnable onStateChanged) {
         this.window = window;
         this.identity = identity;
@@ -94,7 +96,7 @@ final class PlayerController implements ServerConnection.Listener {
         clockTicker.setCycleCount(Timeline.INDEFINITE);
         clockTicker.play();
         window.setOnItemEnded(this::itemEnded);
-        window.showInfo("Conectando ao servidor…", null, serverLabel);
+        window.showInfo("Conectando ao servidor…", null, serverLabel.get());
     }
 
     void attach(ServerConnection serverConnection) {
@@ -103,7 +105,7 @@ final class PlayerController implements ServerConnection.Listener {
 
     @Override
     public void onConnected() {
-        LOG.log(System.Logger.Level.INFO, "connected to {0}", serverLabel);
+        LOG.log(System.Logger.Level.INFO, "connected to {0}", serverLabel.get());
     }
 
     @Override
@@ -123,7 +125,7 @@ final class PlayerController implements ServerConnection.Listener {
                     window.showInfo("Outro player com a mesma identidade conectou", null,
                             "Esta instalação parece ser uma cópia. Apague a pasta de dados do player para gerar uma nova identidade.");
                 } else {
-                    window.showInfo("Sem conexão com o servidor", null, serverLabel + "\nTentando novamente…");
+                    window.showInfo("Sem conexão com o servidor", null, serverLabel.get() + "\nTentando novamente…");
                 }
                 onStateChanged.run();
             }
@@ -137,7 +139,7 @@ final class PlayerController implements ServerConnection.Listener {
                 identity.clearToken(); // the server no longer knows us as approved
                 leaveItem();
                 window.showInfo("Aguardando aprovação", pending.pairingCode(),
-                        "Aprove este player em Dispositivos no painel web\nServidor: " + serverLabel
+                        "Aprove este player em Dispositivos no painel web\nServidor: " + serverLabel.get()
                                 + "\n" + identity.deviceId());
             }
             case Message.Paired p -> {

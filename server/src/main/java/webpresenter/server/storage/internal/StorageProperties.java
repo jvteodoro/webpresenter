@@ -12,13 +12,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param playerEndpoint URL put into links for MediaPlayers (defaults to {@code publicEndpoint})
  * @param workerEndpoint URL put into links for processing workers (defaults to {@code endpoint}:
  *     workers usually run next to the server)
+ * @param linkPrefix when set (e.g. "/s3"), links for browsers and players are returned relative,
+ *     as this prefix + the object path: the reverse proxy forwards it to the store with the
+ *     presigning endpoint's host, so the links work whatever address the client used
  * @param region signing region (any value for SeaweedFS)
  * @param bucket bucket holding all media; created on startup if missing
  */
 @ConfigurationProperties("webpresenter.storage")
 record StorageProperties(
-        URI endpoint, URI publicEndpoint, URI playerEndpoint, URI workerEndpoint, String region, String accessKey,
-        String secretKey, String bucket) {
+        URI endpoint, URI publicEndpoint, URI playerEndpoint, URI workerEndpoint, String linkPrefix, String region,
+        String accessKey, String secretKey, String bucket) {
 
     StorageProperties {
         if (publicEndpoint == null || publicEndpoint.toString().isBlank()) {

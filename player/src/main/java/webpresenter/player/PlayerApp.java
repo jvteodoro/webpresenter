@@ -33,7 +33,12 @@ public final class PlayerApp extends Application {
         PlayerConfig config = PlayerConfig.from(getParameters().getRaw());
         PlayerPaths paths = PlayerPaths.resolve(config.dataDir());
         PlayerIdentity identity = PlayerIdentity.load(paths.configDir());
-        cache = new MediaCache(paths.cacheDir());
+        // A fixed --server-url, or the server found on the network (its beacon); links to media are
+        // resolved against wherever the server currently is.
+        webpresenter.player.net.ServerAddress address = config.serverUrl() != null
+                ? webpresenter.player.net.ServerAddress.fixed(config.serverUrl())
+                : webpresenter.player.net.ServerAddress.discovered(PlayerConfig.BEACON_PORT);
+        cache = new MediaCache(paths.cacheDir(), address::link);
         String hostname = hostname();
 
         AtomicReference<List<Message.DisplayInfo>> displays = new AtomicReference<>(displays());
@@ -41,10 +46,9 @@ public final class PlayerApp extends Application {
 
         window = new PresentationWindow(stage, config.windowed());
         DebugSnapshots snapshots = DebugSnapshots.fromSystemProperty(window.scene());
-        controller = new PlayerController(window, identity, cache, config.serverUrl().toString(),
-                snapshots::capture);
+        controller = new PlayerController(window, identity, cache, address::describe, snapshots::capture);
 
-        connection = new ServerConnection(config.serverUrl(), new ProtocolCodec(),
+        connection = new ServerConnection(address, new ProtocolCodec(),
                 () -> new Message.Hello(identity.deviceId().toString(), hostname, VERSION, ProtocolVersion.CURRENT,
                         displays.get(), identity.token().orElse(null)),
                 controller);
