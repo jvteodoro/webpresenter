@@ -22,6 +22,8 @@ separation = [
 # Lyrics and timing from sung recordings (Whisper, CTranslate2 on CPU).
 lyrics = [
     "faster-whisper==1.2.1",
+    # faster-whisper 1.2 opens audio with an argument PyAV 16+ no longer has.
+    "av>=14,<16",
 ]
 
 [project.scripts]
