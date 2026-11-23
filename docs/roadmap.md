@@ -205,8 +205,15 @@ given instrument) and choir rehearsal (one voice at a time).
 - **Track mixer** (song page): the recording's tracks play together outside any event, with mute,
   solo and level per track and quick mixes (all, without voice, only voice, original); the lyrics
   follow the timing. Separated tracks are not offered for presenting.
-- **Choir voices** (`SEPARATE_VOICES`, from the vocals track): the model is chosen by evaluation on
-  real recordings (`worker/tools/evaluate_voices.py`, `deploy/gpu-worker/eval`).
+- **Choir voices** (`SEPARATE_VOICES`, from the vocals track): ACappellaSet's fixed six-output
+  HTDemucs (soprano, alto, tenor, bass, vocal percussion, and lead/baritone); voices that are
+  silent in the recording give no track. Its code (MIT) is pinned in the worker image; its
+  weights (CC BY-NC 4.0: a church's own use, not for sale) are downloaded on first use.
+  Chosen by evaluating it against SepACap on a real recording (a soprano and alto duet,
+  `worker/tools/evaluate_voices.py`, `deploy/gpu-worker/eval`): SepACap separated slightly more
+  cleanly (17 dB reconstruction against 8 dB) but needs more than 4 GB of GPU memory and takes
+  about 45 minutes per song on CPU; ACappellaSet takes about 6 minutes on a GTX 1050 Ti. Extra
+  voices (tenor, lead) on a duet can be real countermelodies or leakage; listening decides.
 - **Jobs with several results**: `outputs` (a presigned upload per name) in the job message and
   `files` in the worker's `DONE` event.
 - **GPU worker**: heavy jobs (separation, recognition) have their own queue. A worker on a GPU

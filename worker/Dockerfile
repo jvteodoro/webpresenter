@@ -18,7 +18,12 @@ WORKDIR /app
 RUN pip install --no-cache-dir torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/${TORCH_INDEX}
 COPY pyproject.toml ./
 COPY webpresenter_worker ./webpresenter_worker
-RUN pip install --no-cache-dir ".[separation,lyrics]"
+RUN pip install --no-cache-dir ".[separation,voices,lyrics]"
+# ACappellaSet (MIT), pinned: the choir-voice model's code. Its weights are downloaded on first use.
+ARG ACAPPELLASET_COMMIT=856a4222ed81648ce14bf832af83bbb8fb2ed056
+ADD https://github.com/pting126/ACappellaSet/archive/${ACAPPELLASET_COMMIT}.tar.gz /tmp/acappellaset.tar.gz
+RUN mkdir -p /opt/acappellaset && tar -xzf /tmp/acappellaset.tar.gz -C /opt/acappellaset --strip-components=1 \
+    && rm /tmp/acappellaset.tar.gz
 
 # Models (Demucs, Whisper) are downloaded on first use into the /models volume.
 ENV TORCH_HOME=/models HF_HOME=/models/huggingface WORK_DIR=/work PYTHONUNBUFFERED=1

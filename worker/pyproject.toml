@@ -19,6 +19,14 @@ separation = [
     "soundfile==0.13.1",
 ]
 
+# Choir voices of a vocals track (ACappellaSet's fixed HTDemucs; its code is in the image, see Dockerfile).
+voices = [
+    "omegaconf==2.3.0",
+    "einops==0.8.1",
+    "openunmix==1.3.0",
+    "scipy==1.15.3",
+]
+
 # Lyrics and timing from sung recordings (Whisper, CTranslate2 on CPU).
 lyrics = [
     "faster-whisper==1.2.1",

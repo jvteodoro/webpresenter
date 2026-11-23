@@ -197,10 +197,10 @@ def run_demucs(source: Path, workdir: Path, report: Reporter, start: int, end: i
 
 
 def run_with_progress(command: list[str], report: Reporter, start: int, end: int, label: str, failure: str,
-                      env: dict[str, str] | None = None) -> None:
+                      env: dict[str, str] | None = None, cwd: Path | None = None) -> None:
     """Runs a tool that prints tqdm progress bars, mapping its percentage to start..end."""
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
-                               errors="replace", env=env)
+                               errors="replace", env=env, cwd=cwd)
     tail: list[str] = []
     watcher = threading.Thread(target=_kill_on_cancel, args=(process, report.cancelled), daemon=True)
     watcher.start()
@@ -284,6 +284,63 @@ def separate_playback(job: JobRequest, workdir: Path, report: Reporter) -> Resul
     return many(files)
 
 
+# ---------------------------------------------------------------------- choir voices
+
+def separate_voices(job: JobRequest, workdir: Path, report: Reporter) -> Result:
+    """Choir voices (soprano, alto, tenor, bass, lead, vocal percussion) of a vocals track."""
+    from . import voices
+
+    if not job.input_url:
+        raise JobFailed("Trabalho sem arquivo de entrada")
+    source = workdir / "input"
+    report.progress(1, "Baixando a faixa de voz")
+    download(job.input_url, source, report, 1, 5, "Baixando a faixa de voz")
+    lossless = is_lossless(source)
+    wav = workdir / "voices-input.wav"
+    convert = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(source), "-ac", "2", "-ar", "44100",
+                              "-c:a", "pcm_f32le", str(wav)], capture_output=True, text=True)
+    if convert.returncode != 0:
+        raise JobFailed(f"Não foi possível ler a faixa de voz: {convert.stderr.strip()[:300]}")
+    report.progress(6, "Preparando o modelo de naipes")
+    try:
+        command = voices.separate(wav, workdir / "voices", _device("VOICES_DEVICE"))
+    except Exception as e:
+        raise JobFailed(f"Não foi possível obter o modelo de naipes: {e}")
+    report.check()
+    report.progress(10, "Separando os naipes (pode levar alguns minutos)")
+    env = {**os.environ, "PYTHONPATH": str(voices.code_dir())}
+    run_with_progress(command, report, 10, 88, "Separando os naipes", "A separação dos naipes falhou", env=env,
+                      cwd=voices.code_dir())
+    import numpy as np
+    import soundfile as sf
+
+    mixture, _ = sf.read(wav, dtype="float32", always_2d=True)
+    energy = float(np.sum(mixture ** 2))
+    report.progress(90, "Codificando os naipes")
+    files = {}
+    for theirs, ours in voices.OUTPUTS.items():
+        track = workdir / "voices" / f"{theirs}.wav"
+        if track.exists() and voices.level_db(track, energy) > voices.SILENT_BELOW_DB:
+            files[ours] = encode_track([track], workdir / ours, lossless)
+    if not files:
+        raise JobFailed("Nenhum naipe foi encontrado na faixa")
+    report.check()
+    return many(files)
+
+
+def _device(variable: str) -> str:
+    """cpu or cuda: the variable when set, otherwise cuda when PyTorch sees a GPU."""
+    chosen = os.environ.get(variable)
+    if chosen:
+        return chosen
+    try:
+        import torch
+
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except ImportError:
+        return "cpu"
+
+
 # ---------------------------------------------------------------------- lyrics and timing
 
 def transcribe_lyrics(job: JobRequest, workdir: Path, report: Reporter) -> Result:
@@ -355,4 +412,4 @@ def _kill_on_cancel(process: subprocess.Popen, cancelled: threading.Event) -> No
 
 
 HANDLERS = {"YOUTUBE_IMPORT": youtube_import, "SEPARATE_PLAYBACK": separate_playback,
-            "TRANSCRIBE_LYRICS": transcribe_lyrics}
+            "TRANSCRIBE_LYRICS": transcribe_lyrics, "SEPARATE_VOICES": separate_voices}

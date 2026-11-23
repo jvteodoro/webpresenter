@@ -82,7 +82,11 @@ def run_sepacap(audio44: np.ndarray, repo: Path, checkpoint: Path, config: Path,
     out = torch.zeros(len(names), padded.shape[0])
     weight = torch.zeros(padded.shape[0])
     with torch.inference_mode():
-        for start in range(0, padded.shape[0] - chunk + 1, hop):
+        starts = range(0, padded.shape[0] - chunk + 1, hop)
+        began = time.monotonic()
+        for n, start in enumerate(starts):
+            if n and n % 5 == 0:
+                print(f"SepACap {n}/{len(starts)} chunks, {time.monotonic() - began:.0f} s", flush=True)
             piece = padded[start:start + chunk].to(device).unsqueeze(0)
             sources, _ = model(piece)
             for i, s in enumerate(sources[:len(names)]):
