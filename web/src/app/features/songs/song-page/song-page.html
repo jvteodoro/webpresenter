@@ -60,6 +60,13 @@
           <p class="generation-failed" role="alert"><mat-icon>error</mat-icon> A geração de {{ jobLabel(job) }} falhou: {{ job.message }}. <a routerLink="/fila">Ver fila</a></p>
         }
       }
+      @for (g of trackGroups(); track g.source.id) {
+        <div class="tracks" role="group" [attr.aria-label]="'Faixas separadas de ' + recordingLabels[g.source.kind]">
+          <h2>Faixas separadas · {{ recordingLabels[g.source.kind] }}</h2>
+          <app-track-mixer [group]="g" [canSeparateVoices]="currentUser.canEditSongs()" [separatingVoices]="separatingVoices()"
+                           (position)="onMixerPosition(g.source.id, $event)" (separateVoices)="separateVoices($event)" />
+        </div>
+      }
       @if (recording(); as r) {
         @if (r.kind !== 'PLAYBACK' && currentUser.canEditSongs()) {
           <div class="generate-actions">

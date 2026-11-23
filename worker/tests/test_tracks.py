@@ -50,5 +50,20 @@ class TracksTest(unittest.TestCase):
         return float(out.split("mean_volume:")[1].split("dB")[0])
 
 
+class ReachTest(unittest.TestCase):
+    def test_links_go_to_the_relay_with_their_host(self):
+        import os
+        link = "http://seaweedfs:8333/media/jobs/1/result?X-Amz-Signature=abc"
+        os.environ.pop("MEDIA_STORE_ADDRESS", None)
+        self.assertEqual((link, {}), jobs.reach(link))
+        os.environ["MEDIA_STORE_ADDRESS"] = "http://10.66.0.3:18334/"
+        try:
+            url, headers = jobs.reach(link)
+        finally:
+            del os.environ["MEDIA_STORE_ADDRESS"]
+        self.assertEqual("http://10.66.0.3:18334/media/jobs/1/result?X-Amz-Signature=abc", url)
+        self.assertEqual({"Host": "seaweedfs:8333"}, headers)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -21,6 +21,7 @@ import { Lyrics, RECORDING_LABELS, Recording, SongDetail, inputOf } from '../../
 import { SongsApi } from '../../../core/songs/songs-api';
 import { DurationPipe } from '../../../shared/pipes/duration.pipe';
 import { LyricsEditorData, LyricsEditorDialog } from '../lyrics-editor-dialog/lyrics-editor-dialog';
+import { TrackMixer, trackGroups } from '../track-mixer/track-mixer';
 
 /**
  * A song: collections, recordings and lyrics. Playing a recording highlights the slide its timing
@@ -36,6 +37,7 @@ import { LyricsEditorData, LyricsEditorDialog } from '../lyrics-editor-dialog/ly
     MatProgressBarModule,
     MatTooltipModule,
     DurationPipe,
+    TrackMixer,
   ],
   templateUrl: './song-page.html',
   styleUrl: './song-page.scss',
@@ -56,7 +58,8 @@ export class SongPage {
   protected readonly songJobs = computed<Job[]>(() => {
     const latest = new Map<string, Job>();
     for (const j of this.jobs.jobs()) {
-      if ((j.type === 'SEPARATE_PLAYBACK' || j.type === 'TRANSCRIBE_LYRICS') && j.params['songId'] === this.id()
+      if ((j.type === 'SEPARATE_PLAYBACK' || j.type === 'TRANSCRIBE_LYRICS' || j.type === 'SEPARATE_VOICES')
+          && j.params['songId'] === this.id()
           && !latest.has(j.type)) {
         latest.set(j.type, j);
       }
@@ -64,6 +67,14 @@ export class SongPage {
     return [...latest.values()];
   });
   protected readonly generating = computed(() => this.songJobs().some((j) => j.type === 'SEPARATE_PLAYBACK' && isActive(j)));
+  protected readonly separatingVoices = computed(() => this.songJobs().some((j) => j.type === 'SEPARATE_VOICES' && isActive(j)));
+  /** Recordings with separated tracks, played together by the track mixer. */
+  protected readonly trackGroups = computed(() => {
+    const s = this.song();
+    return s ? trackGroups(s) : [];
+  });
+  /** While the track mixer plays: the recording its tracks came from and the position. */
+  protected readonly mixer = signal<{ sourceId: string; positionMs: number } | null>(null);
   protected readonly transcribing = computed(() => this.songJobs().some((j) => j.type === 'TRANSCRIBE_LYRICS' && isActive(j)));
   /** The song has real lyrics (not only the instrumental placeholder of a download). */
   protected readonly hasLyrics = computed(() => (this.song()?.slideSequence ?? []).some((s) => s.lines.length > 0));
@@ -85,12 +96,15 @@ export class SongPage {
   });
   /** Start time of each slide in the selected recording. */
   protected readonly cueBySlide = computed(() => new Map((this.recording()?.timing?.cues ?? []).map((c) => [c.slide, c.startMs])));
-  /** Slide on screen at the current audio position, according to the timing. */
+  /** Slide on screen at the current audio position (of the recording, or of the track mixer), according to the timing. */
   protected readonly activeSlide = computed(() => {
-    const cues = this.recording()?.timing?.cues ?? [];
+    const mixer = this.mixer();
+    const timed = mixer ? this.song()?.recordings.find((r) => r.id === mixer.sourceId) : this.recording();
+    const position = mixer ? mixer.positionMs : this.positionMs();
+    const cues = timed?.timing?.cues ?? [];
     let active = -1;
     for (const c of cues) {
-      if (c.startMs <= this.positionMs()) {
+      if (c.startMs <= position) {
         active = c.slide;
       }
     }
@@ -247,6 +261,24 @@ export class SongPage {
       },
       error: (e: HttpErrorResponse) =>
         this.snackBar.open(e.error?.detail ?? `Não foi possível gerar (${e.status}).`, 'OK', { duration: 5000 }),
+    });
+  }
+
+  protected onMixerPosition(sourceId: string, positionMs: number | null): void {
+    this.mixer.set(positionMs === null ? null : { sourceId, positionMs });
+    if (positionMs !== null) {
+      this.audio()?.nativeElement.pause();
+    }
+  }
+
+  protected separateVoices(recording: Recording): void {
+    this.jobsApi.separateVoices(this.id(), recording.id).subscribe({
+      next: (job) => {
+        this.jobs.apply(job);
+        this.snackBar.open('Separação dos naipes na fila.', 'OK', { duration: 5000 });
+      },
+      error: (e: HttpErrorResponse) =>
+        this.snackBar.open(e.error?.detail ?? `Não foi possível separar (${e.status}).`, 'OK', { duration: 5000 }),
     });
   }
 

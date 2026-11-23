@@ -173,3 +173,14 @@
   gap: 0.5rem;
   margin-top: 0.5rem;
 }
+
+.tracks {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+
+  h2 {
+    font: var(--mat-sys-title-small);
+    margin: 0 0 4px;
+  }
+}

@@ -11,6 +11,7 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
@@ -53,8 +54,23 @@ def many(files: dict[str, Path]) -> Result:
 
 # ---------------------------------------------------------------------- transfer helpers
 
+def reach(url: str) -> tuple[str, dict[str, str]]:
+    """
+    Where to send a work link, and headers. A worker on another computer reaches the media store
+    through a relay at another address (MEDIA_STORE_ADDRESS, e.g. http://10.66.0.3:18333): the link
+    goes there, with its original Host header, which its signature covers.
+    """
+    relay = os.environ.get("MEDIA_STORE_ADDRESS", "").rstrip("/")
+    if not relay:
+        return url, {}
+    parts = urlsplit(url)
+    target = urlsplit(relay)
+    return urlunsplit((target.scheme, target.netloc, parts.path, parts.query, "")), {"Host": parts.netloc}
+
+
 def download(url: str, target: Path, report: Reporter, start: int, end: int, label: str) -> None:
-    with requests.get(url, stream=True, timeout=60) as response:
+    url, headers = reach(url)
+    with requests.get(url, headers=headers, stream=True, timeout=60) as response:
         if response.status_code != 200:
             raise JobFailed(f"Não foi possível obter o arquivo de entrada (HTTP {response.status_code})")
         total = int(response.headers.get("Content-Length") or 0)
@@ -70,8 +86,9 @@ def download(url: str, target: Path, report: Reporter, start: int, end: int, lab
 
 def upload(url: str, source: Path) -> None:
     size = source.stat().st_size
+    url, headers = reach(url)
     with open(source, "rb") as data:
-        response = requests.put(url, data=data, headers={"Content-Length": str(size)}, timeout=3600)
+        response = requests.put(url, data=data, headers={**headers, "Content-Length": str(size)}, timeout=3600)
     if response.status_code not in (200, 201, 204):
         raise JobFailed(f"Não foi possível enviar o resultado (HTTP {response.status_code})")
 

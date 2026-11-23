@@ -85,11 +85,16 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
 
     record CollectionInput(String slug, String name, String group, String number) {}
 
-    /** @param part what a separated track (STEM) holds; required for that kind only */
-    record RecordingInput(RecordingKind kind, UUID mediaId, Source source, Timing timing, StemPart part) {
+    /**
+     * @param part what a separated track (STEM) holds; required for that kind only
+     * @param derivedFrom the song's recording this track belongs to (same timeline; e.g. a rehearsal
+     *     kit's voice tracks), or null
+     */
+    record RecordingInput(RecordingKind kind, UUID mediaId, Source source, Timing timing, StemPart part,
+            UUID derivedFrom) {
 
         RecordingInput(RecordingKind kind, UUID mediaId, Source source, Timing timing) {
-            this(kind, mediaId, source, timing, null);
+            this(kind, mediaId, source, timing, null, null);
         }
     }
 
@@ -120,8 +125,11 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
         if (input.kind() == null || (input.kind() == RecordingKind.STEM) != (input.part() != null)) {
             throw new InvalidSongException("a separated track (STEM) needs its part; other kinds take none");
         }
+        if (input.derivedFrom() != null) {
+            song.recording(input.derivedFrom()); // a recording of this song
+        }
         Recording recording = song.addRecording(input.kind(), input.mediaId(),
-                input.source() == null ? Source.MANUAL : input.source(), input.part(), null);
+                input.source() == null ? Source.MANUAL : input.source(), input.part(), input.derivedFrom());
         if (input.timing() != null) {
             recording.setTiming(timingJson(song, input.timing()));
         }
@@ -146,10 +154,13 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
         }
         stems.values().forEach(m -> requireMedia(m, MediaKind.AUDIO, MediaKind.VIDEO));
         // Earlier results for the same source and parts are replaced.
+        // Playbacks generated before tracks recorded their origin (derivedFrom null) are replaced too.
         List<Recording> replaced = song.recordings().stream()
-                .filter(r -> r.source() == Source.PIPELINE && sourceRecordingId.equals(r.derivedFrom()))
-                .filter(r -> (r.kind() == RecordingKind.PLAYBACK && playbackMediaId != null)
-                        || (r.kind() == RecordingKind.STEM && stems.containsKey(r.part())))
+                .filter(r -> r.source() == Source.PIPELINE)
+                .filter(r -> (r.kind() == RecordingKind.PLAYBACK && playbackMediaId != null
+                                && (r.derivedFrom() == null || sourceRecordingId.equals(r.derivedFrom())))
+                        || (r.kind() == RecordingKind.STEM && stems.containsKey(r.part())
+                                && sourceRecordingId.equals(r.derivedFrom())))
                 .toList();
         java.util.Set<UUID> added = new java.util.HashSet<>(stems.values());
         if (playbackMediaId != null) {

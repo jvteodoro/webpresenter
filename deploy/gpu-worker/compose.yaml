@@ -17,16 +17,14 @@ services:
     environment:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
-      RABBITMQ_URL: amqp://webpresenter:${RABBITMQ_PASSWORD:?}@${SERVER_VPN_ADDRESS:?}:5672/%2F
+      RABBITMQ_URL: amqp://webpresenter:${RABBITMQ_PASSWORD:?}@${SERVER_VPN_ADDRESS:?}:${RELAY_AMQP_PORT:-5672}/%2F
+      # Work links name the media store as the main server sees it; they go to the relay instead.
+      MEDIA_STORE_ADDRESS: http://${SERVER_VPN_ADDRESS:?}:${RELAY_S3_PORT:-8333}
       DEMUCS_DEVICE: cuda
       # Seconds of audio per Demucs chunk: lower uses less GPU memory (4 GB cards need a smaller one).
       DEMUCS_SEGMENT: ${DEMUCS_SEGMENT:-}
       WHISPER_MODEL: ${WHISPER_MODEL:-medium}
       JOB_KINDS: ${JOB_KINDS:-all}
-    # Work links point to the media store by its name inside the main server ("seaweedfs"): here
-    # that name is the relay on the server's VPN address.
-    extra_hosts:
-      - "seaweedfs:${SERVER_VPN_ADDRESS:?}"
     volumes:
       - models:/models
 
