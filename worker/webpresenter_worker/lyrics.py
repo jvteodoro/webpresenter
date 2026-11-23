@@ -17,11 +17,10 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
-MAX_LINE_CHARS = 42
 LINES_PER_SLIDE = 2
 SLIDE_GAP_S = 2.5        # a pause this long between lines starts a new slide
-BLOCK_GAP_S = 6.0        # and this long, a new block (verse/chorus), with an instrumental slide
-SAME_BLOCK_RATIO = 0.75  # blocks this similar are the same part
+BLOCK_GAP_S = 5.0        # and this long, a new block (verse/chorus)
+INSTRUMENTAL_GAP_S = 8.0 # and this long, an instrumental slide between blocks
 
 
 @dataclass
@@ -29,6 +28,8 @@ class Word:
     text: str
     start: float
     end: float
+    phrase_start: bool = False  # first word of a phrase (a Whisper segment)
+    probability: float = 1.0    # recognition confidence
 
 
 @dataclass
@@ -47,6 +48,10 @@ class Line:
     def end(self) -> float:
         return self.words[-1].end
 
+    @property
+    def confidence(self) -> float:
+        return sum(w.probability for w in self.words) / len(self.words)
+
 
 def normalize(text: str) -> str:
     text = unicodedata.normalize("NFKD", text.lower())
@@ -60,42 +65,94 @@ def tokens(text: str) -> list[str]:
 
 # ---------------------------------------------------------------------- recognition
 
-def recognize(audio_path: str, model_name: str, language: str, progress) -> list[Word]:
-    """Words with their times, from faster-whisper (voice activity filter on)."""
+def recognize(audio_path: str, model_name: str, language: str, progress, hint: str | None = None) -> list[Word]:
+    """
+    Words with their times, from faster-whisper, on the isolated vocals.
+
+    No voice activity filter: it takes long sung notes for silence and drops whole stretches of the
+    song. Segments Whisper itself finds unlikely to be speech, or that are only noise, are dropped.
+    """
     from faster_whisper import WhisperModel
 
     model = WhisperModel(model_name, device="auto", compute_type="int8")
-    segments, info = model.transcribe(audio_path, language=language, word_timestamps=True, vad_filter=True,
-                                      condition_on_previous_text=False, beam_size=5)
+    segments, info = model.transcribe(audio_path, language=language, word_timestamps=True, vad_filter=False,
+                                      condition_on_previous_text=False, beam_size=5,
+                                      # The title as a hint for its words (an initial prompt leaks into the text).
+                                      hotwords=hint or None)
     words: list[Word] = []
     duration = max(1.0, info.duration)
     for segment in segments:
-        for w in segment.words or []:
-            text = w.word.strip()
-            if text:
-                words.append(Word(text, float(w.start), float(w.end)))
         progress(min(1.0, segment.end / duration))
+        text = segment.text.strip()
+        if segment.no_speech_prob > 0.6 or len(normalize(text)) < 3 or segment.compression_ratio > 2.6:
+            continue  # noise, hallucination or repetition loop
+        first = True
+        for w in segment.words or []:
+            t = w.word.strip()
+            if t:
+                words.append(Word(t, float(w.start), float(w.end), phrase_start=first, probability=float(w.probability)))
+                first = False
     return words
 
 
 # ---------------------------------------------------------------------- transcribe mode
 
+# Words that are capitalized inside a sentence (do not start a new line by themselves).
+REVERENT = {"ti", "tu", "teu", "tua", "teus", "tuas", "senhor", "deus", "jesus", "cristo", "pai", "espirito", "santo",
+            "ele", "seu", "sua", "seus", "suas", "rei", "salvador", "eu"}
+MAX_LINE_CHARS = 42
+
+
 def lines_from_words(words: list[Word]) -> list[Line]:
-    """Breaks the word stream into sung lines: at pauses, sentence ends, or when too long."""
+    """
+    Sung lines: a new line at a new phrase, after punctuation, at a capitalized word starting a
+    sentence, or after a pause; lines still too long are split where it is most balanced.
+    """
     lines: list[Line] = []
     current = Line()
     for w in words:
         if current.words:
-            gap = w.start - current.end
-            too_long = len(current.text) + 1 + len(w.text) > MAX_LINE_CHARS
-            sentence_end = current.words[-1].text[-1:] in ".!?;"
-            if gap > 0.8 or too_long or sentence_end:
+            previous = current.words[-1]
+            gap = w.start - previous.end
+            # A capitalized word starts a sentence, unless it is a reverent capital ("Teu", "Senhor")
+            # sung straight on; after even a short pause it starts the line.
+            capital = w.text[:1].isupper() and len(current.words) >= 3 \
+                and (normalize(w.text) not in REVERENT or gap > 0.35)
+            punctuation = previous.text[-1:] in ",.;!?" and len(current.words) >= 3
+            if (w.phrase_start and len(current.words) >= 2) or gap > 0.8 or capital or punctuation:
                 lines.append(current)
                 current = Line()
         current.words.append(w)
     if current.words:
         lines.append(current)
-    return lines
+    return merge_short_lines([part for line in lines for part in split_long(line)])
+
+
+def split_long(line: Line) -> list[Line]:
+    """Splits a line longer than MAX_LINE_CHARS at the most balanced word boundary, preferring one
+    after a comma or before a capitalized word."""
+    if len(line.text) <= MAX_LINE_CHARS or len(line.words) < 2:
+        return [line]
+    best, best_score = 1, None
+    for k in range(1, len(line.words)):
+        left = len(" ".join(w.text for w in line.words[:k]))
+        score = abs(left - len(line.text) / 2) - (6 if line.words[k - 1].text[-1:] in ",;" else 0) \
+            - (8 if line.words[k].text[:1].isupper() else 0)  # a capital usually starts the next phrase
+        if best_score is None or score < best_score:
+            best, best_score = k, score
+    return split_long(Line(line.words[:best])) + split_long(Line(line.words[best:]))
+
+
+def merge_short_lines(lines: list[Line]) -> list[Line]:
+    """A line of one or two words joins the previous one when they fit together."""
+    result: list[Line] = []
+    for line in lines:
+        if result and len(line.words) <= 2 and len(result[-1].text) + len(line.text) < MAX_LINE_CHARS \
+                and line.start - result[-1].end < 2.0:
+            result[-1].words.extend(line.words)
+        else:
+            result.append(line)
+    return result
 
 
 def clean(text: str) -> str:
@@ -103,73 +160,118 @@ def clean(text: str) -> str:
     return text[:1].upper() + text[1:] if text else text
 
 
+SAME_LINE_RATIO = 0.7
+
+
+def similar_lines(a: str, b: str) -> bool:
+    return difflib.SequenceMatcher(None, normalize(a), normalize(b)).ratio() >= SAME_LINE_RATIO
+
+
 def build_lyrics(words: list[Word]) -> tuple[dict, list[dict]]:
-    """Parts, order and cues (one per slide of the sequence) from the recognized words."""
+    """
+    Parts, order and cues (one per slide of the sequence) from the recognized words.
+
+    Lines sung more than once mark the chorus. Runs of repeated lines are chorus occurrences (a run
+    is split where its first line comes back: the chorus sung twice); occurrences sharing most
+    lines are the same part, written as its most confidently recognized occurrence, each occurrence
+    keeping its own times. Other runs are verses. Slides hold up to two lines.
+    """
     lines = lines_from_words(words)
-    # Slides: up to two lines, a new one after a pause.
-    slides: list[list[Line]] = []
-    for line in lines:
-        if slides and len(slides[-1]) < LINES_PER_SLIDE and line.start - slides[-1][-1].end < SLIDE_GAP_S:
-            slides[-1].append(line)
-        else:
-            slides.append([line])
-    # Blocks: consecutive slides, split at long pauses.
-    blocks: list[list[list[Line]]] = []
-    for slide in slides:
-        if blocks and slide[0].start - blocks[-1][-1][-1].end < BLOCK_GAP_S:
-            blocks[-1].append(slide)
-        else:
-            blocks.append([slide])
+    if not lines:
+        return {"parts": [], "order": []}, []
+    repeated = [any(similar_lines(line.text, other.text) for j, other in enumerate(lines) if j != i)
+                for i, line in enumerate(lines)]
 
-    def block_text(block):
-        return normalize(" ".join(line.text for slide in block for line in slide))
+    runs: list[list[Line]] = []
+    kinds: list[bool] = []
+    for i, line in enumerate(lines):
+        restart = bool(runs) and kinds[-1] and repeated[i] and len(runs[-1]) >= 2 \
+            and similar_lines(line.text, runs[-1][0].text)
+        if not runs or repeated[i] != kinds[-1] or line.start - runs[-1][-1].end >= BLOCK_GAP_S or restart:
+            runs.append([line])
+            kinds.append(repeated[i])
+        else:
+            runs[-1].append(line)
+    merged_runs, merged_kinds = [], []
+    for run, kind in zip(runs, kinds):
+        if merged_runs and sum(len(l.words) for l in run) <= 3:
+            merged_runs[-1].extend(run)  # a word or two is not a stanza
+        else:
+            merged_runs.append(list(run))
+            merged_kinds.append(kind)
+    runs, kinds = merged_runs, merged_kinds
 
-    # Same part for similar blocks (a chorus sung several times).
+    def same_run(a: list[Line], b: list[Line]) -> bool:
+        return len(a) == len(b) and all(similar_lines(x.text, y.text) for x, y in zip(a, b))
+
+    # Groups: occurrences that match line by line are the same part (so every slide of every
+    # occurrence has its time); anything else is shown as it was sung.
     groups: list[int] = []
-    representatives: list[int] = []
-    for i, block in enumerate(blocks):
-        text = block_text(block)
-        match = next((g for g, rep in enumerate(representatives)
-                      if difflib.SequenceMatcher(None, text, block_text(blocks[rep])).ratio() >= SAME_BLOCK_RATIO), None)
+    members: list[list[int]] = []
+    for i, run in enumerate(runs):
+        match = next((g for g, m in enumerate(members) if same_run(run, runs[m[0]])), None)
         if match is None:
-            representatives.append(i)
-            match = len(representatives) - 1
+            members.append([i])
+            match = len(members) - 1
+        else:
+            members[match].append(i)
         groups.append(match)
-    counts = collections.Counter(groups)
-    chorus = next((g for g, n in counts.most_common(1) if n > 1), None)
 
-    parts, ids = [], {}
+    def canonical(g: int) -> list[Line]:
+        """The best recognized occurrence (they all have the same lines)."""
+        return max((runs[i] for i in members[g]), key=lambda r: sum(l.confidence for l in r) / len(r))
+
+    def voted(g: int, line: Line) -> str:
+        """The wording most like the others among this line's occurrences (one bad hearing is outvoted)."""
+        variants = [other.text for i in members[g] for other in runs[i] if similar_lines(line.text, other.text)]
+        if len(variants) < 3:
+            return line.text
+        return max(variants, key=lambda v: sum(difflib.SequenceMatcher(None, normalize(v), normalize(o)).ratio()
+                                               for o in variants))
+
+    def slides_of(run: list[Line]) -> list[list[Line]]:
+        slides: list[list[Line]] = []
+        for line in run:
+            if slides and len(slides[-1]) < LINES_PER_SLIDE and line.start - slides[-1][-1].end < SLIDE_GAP_S:
+                slides[-1].append(line)
+            else:
+                slides.append([line])
+        return slides
+
+    chorus_groups = sorted((g for g in range(len(members)) if kinds[members[g][0]]),
+                           key=lambda g: -len(members[g]))
+    parts, ids, written = [], {}, {}
     verse = 0
-    for g, rep in enumerate(representatives):
-        if g == chorus:
-            pid, label, kind = "c", "Coro", "CHORUS"
-        elif counts[g] > 1:
-            pid, label, kind = f"c{g}", f"Coro {g}", "CHORUS"
+    for g in range(len(members)):
+        if g in chorus_groups:
+            n = chorus_groups.index(g)
+            pid, label, kind = ("c", "Coro", "CHORUS") if n == 0 else (f"c{n + 1}", f"Coro {n + 1}", "CHORUS")
         else:
             verse += 1
             pid, label, kind = f"v{verse}", f"Estrofe {verse}", "VERSE"
         ids[g] = pid
+        written[g] = slides_of(canonical(g))
         parts.append({"id": pid, "kind": kind, "label": label,
-                      "slides": [{"lines": [clean(l.text) for l in slide], "cue": None} for slide in blocks[rep]]})
+                      "slides": [{"lines": [clean(voted(g, l)) for l in slide], "cue": None} for slide in written[g]]})
+    parts.sort(key=lambda p: (p["kind"] != "VERSE", p["id"]))
 
     order: list[str] = []
     cues: list[dict] = []
     has_break = False
-    for i, (block, g) in enumerate(zip(blocks, groups)):
-        if i > 0:
-            # Instrumental break between blocks: shown from shortly after the last line ends.
+    for i, (run, g) in enumerate(zip(runs, groups)):
+        if i > 0 and run[0].start - runs[i - 1][-1].end >= INSTRUMENTAL_GAP_S:
             if not has_break:
                 parts.append({"id": "i", "kind": "INSTRUMENTAL", "label": "Instrumental",
                               "slides": [{"lines": [], "cue": None}]})
                 has_break = True
-            cues.append({"slide": len(cues), "startMs": int((blocks[i - 1][-1][-1].end + 1.0) * 1000)})
+            cues.append({"slide": len(cues), "startMs": int((runs[i - 1][-1].end + 1.0) * 1000)})
             order.append("i")
         order.append(ids[g])
-        # Repeated parts keep their first wording; times come from this occurrence.
-        rep_slides = len(blocks[representatives[g]])
-        for k in range(rep_slides):
-            slide = block[k] if k < len(block) else block[-1]
-            cues.append({"slide": len(cues), "startMs": int(slide[0].start * 1000)})
+        # Same lines as the written part: each slide starts with the same line of this occurrence.
+        line_index = 0
+        for slide in written[g]:
+            cues.append({"slide": len(cues), "startMs": int(run[line_index].start * 1000)})
+            line_index += len(slide)
     return {"parts": parts, "order": order}, monotonic(cues)
 
 

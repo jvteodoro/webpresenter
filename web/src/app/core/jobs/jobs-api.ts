@@ -18,8 +18,8 @@ export class JobsApi {
   }
 
   /** Lyrics (when the song has none) and slide times from a sung recording. */
-  transcribeLyrics(songId: string, recordingId: string): Observable<Job> {
-    return this.http.post<Job>(`${this.baseUrl}/transcribe-lyrics`, { songId, recordingId });
+  transcribeLyrics(songId: string, recordingId: string, fresh = false): Observable<Job> {
+    return this.http.post<Job>(`${this.baseUrl}/transcribe-lyrics`, { songId, recordingId, fresh });
   }
 
   cancel(id: string): Observable<Job> {

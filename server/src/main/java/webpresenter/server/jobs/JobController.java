@@ -73,9 +73,13 @@ class JobController {
     @PostMapping("/transcribe-lyrics")
     @PreAuthorize(CAN_MANAGE)
     @ResponseStatus(HttpStatus.CREATED)
-    JobView transcribeLyrics(@Valid @RequestBody SeparateRequest request, Authentication user) {
-        return jobs.transcribeLyrics(request.songId(), request.recordingId(), user.getName());
+    JobView transcribeLyrics(@Valid @RequestBody TranscribeRequest request, Authentication user) {
+        return jobs.transcribeLyrics(request.songId(), request.recordingId(), Boolean.TRUE.equals(request.fresh()),
+                user.getName());
     }
+
+    /** @param fresh transcribe again, replacing lyrics the song already has (default: align them) */
+    record TranscribeRequest(@NotNull UUID songId, @NotNull UUID recordingId, Boolean fresh) {}
 
     @PostMapping("/{id}/cancel")
     @PreAuthorize(CAN_MANAGE)

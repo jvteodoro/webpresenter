@@ -230,7 +230,7 @@ def transcribe_lyrics(job: JobRequest, workdir: Path, report: Reporter) -> Resul
         report.check()
         report.progress(46 + int(fraction * 46), f"Reconhecendo a letra {int(fraction * 100)}%")
 
-    words = lyrics.recognize(str(audio), model, language, heard)
+    words = lyrics.recognize(str(audio), model, language, heard, job.params.get("title"))
     if not words:
         raise JobFailed("Nenhuma palavra reconhecida na gravação")
     report.progress(94, "Montando os slides")

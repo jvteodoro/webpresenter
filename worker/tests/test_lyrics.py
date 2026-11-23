@@ -44,6 +44,31 @@ class BuildLyricsTest(unittest.TestCase):
         self.assertEqual(10_000, times[0])  # the first line starts the first slide (intro before it)
 
 
+class ChorusVariantsTest(unittest.TestCase):
+    def test_a_chorus_heard_differently_each_time_is_one_part_with_the_majority_wording(self):
+        def phrase(text, start):
+            ws = sung(text, start)
+            ws[0].phrase_start = True
+            return ws
+
+        words, t = [], 10.0
+        verses = [["Quantas vezes te magoei", "Feri teu coração"], ["Hoje venho me render", "Quero ser fiel a ti"],
+                  ["Mesmo quando eu me afastar", "Ajuda-me a ouvir tua voz"]]
+        heard_chorus = ["Fim de a mim eu nunca mudei", "Vinde a mim eu nunca mudei", "Vinde a mim eu nunca mudei"]
+        for verse, first in zip(verses, heard_chorus):
+            for line in verse:
+                words += phrase(line, t); t = words[-1].end + 1.0
+            t += 6.0
+            for line in [first, "Como um pai estou a te esperar"]:
+                words += phrase(line, t); t = words[-1].end + 1.0
+            t += 6.0
+        parsed, cues = lyrics.build_lyrics(words)
+        chorus = [p for p in parsed["parts"] if p["kind"] == "CHORUS"]
+        self.assertEqual(1, len(chorus))
+        self.assertEqual("Vinde a mim eu nunca mudei", chorus[0]["slides"][0]["lines"][0])
+        self.assertEqual(3, parsed["order"].count(chorus[0]["id"]))
+
+
 class AlignTest(unittest.TestCase):
     def test_known_lyrics_find_their_times_despite_recognition_errors(self):
         heard = sung("vinde a mim os cansado", 12.0) + sung("eu vos aliviarei", 15.0) \

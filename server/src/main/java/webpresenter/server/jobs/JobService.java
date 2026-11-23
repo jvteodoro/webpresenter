@@ -141,18 +141,25 @@ class JobService {
      */
     @Transactional
     JobView transcribeLyrics(UUID songId, UUID recordingId, String user) {
+        return transcribeLyrics(songId, recordingId, false, user);
+    }
+
+    /** @param fresh transcribe again even if the song has lyrics (they are replaced) */
+    @Transactional
+    JobView transcribeLyrics(UUID songId, UUID recordingId, boolean fresh, String user) {
         var song = songs.find(songId).orElseThrow(() -> new NotFoundException("song " + songId + " not found"));
         var recording = song.recording(recordingId)
                 .orElseThrow(() -> new InvalidJobException("recording " + recordingId + " is not a recording of this song"));
         if (recording.kind() == RecordingKind.PLAYBACK) {
             throw new InvalidJobException("choose a recording with vocals (sung)");
         }
-        List<String> slides = pipeline.slideTexts(songId);
+        List<String> slides = fresh ? List.of() : pipeline.slideTexts(songId);
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("songId", songId.toString());
         params.put("recordingId", recordingId.toString());
         params.put("mediaId", recording.mediaId().toString());
         params.put("language", "pt");
+        params.put("title", song.title()); // helps recognition with the song's own words
         if (!slides.isEmpty()) {
             params.put("slides", slides);
         }

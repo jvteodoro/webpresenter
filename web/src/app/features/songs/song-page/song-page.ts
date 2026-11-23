@@ -11,6 +11,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { filter, switchMap } from 'rxjs';
 import { CurrentUser } from '../../../core/auth/current-user';
+import { ConfirmDialog, ConfirmDialogData } from '../../../shared/dialogs/confirm-dialog';
 import { SlideStyle } from '../../../core/events/event';
 import { SlideStyleDialog, SlideStyleDialogData } from '../../slides/slide-style-dialog';
 import { Job, isActive } from '../../../core/jobs/job';
@@ -220,12 +221,28 @@ export class SongPage {
       });
   }
 
-  protected transcribe(recording: Recording): void {
-    this.jobsApi.transcribeLyrics(this.id(), recording.id).subscribe({
+  /** Transcribes again from the recording, replacing the current (draft) lyrics, after confirmation. */
+  protected transcribeAgain(recording: Recording): void {
+    this.dialog
+      .open<ConfirmDialog, ConfirmDialogData, boolean>(ConfirmDialog, {
+        data: {
+          title: 'Gerar a letra de novo',
+          message: 'A letra atual será substituída pela transcrição da gravação, e os tempos refeitos. Correções feitas à mão serão perdidas.',
+          confirmLabel: 'Gerar de novo',
+          destructive: true,
+        },
+      })
+      .afterClosed()
+      .pipe(filter(Boolean))
+      .subscribe(() => this.transcribe(recording, true));
+  }
+
+  protected transcribe(recording: Recording, fresh = false): void {
+    this.jobsApi.transcribeLyrics(this.id(), recording.id, fresh).subscribe({
       next: (job) => {
         this.jobs.apply(job);
         this.snackBar.open(
-          this.hasLyrics() ? 'Sincronização da letra na fila.' : 'Geração da letra e dos tempos na fila. Isso leva alguns minutos.',
+          this.hasLyrics() && !fresh ? 'Sincronização da letra na fila.' : 'Geração da letra e dos tempos na fila. Isso leva alguns minutos.',
           'OK', { duration: 5000 });
       },
       error: (e: HttpErrorResponse) =>
