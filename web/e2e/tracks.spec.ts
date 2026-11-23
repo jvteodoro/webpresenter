@@ -79,7 +79,12 @@ test.describe('Faixas separadas', () => {
     await tracks.getByRole('button', { name: 'Tocar faixas' }).click();
     await expect(tracks.locator('.time')).toContainText(/^0:0[2-9]/, { timeout: 10000 });
     await expect(page.locator('li.slide.active')).toContainText('Segunda linha');
-    await tracks.getByRole('button', { name: 'Pausar faixas' }).click();
+    // The sticky player shows the separated tracks playing and pauses them from anywhere on the page.
+    const player = page.getByLabel('Gravações');
+    await expect(player.getByRole('status')).toContainText('Faixas separadas');
+    await player.getByRole('button', { name: 'Pausar as faixas separadas' }).click();
+    await expect(player.getByRole('status')).toHaveCount(0);
+    await expect(tracks.getByRole('button', { name: 'Tocar faixas' })).toBeVisible();
 
     // The vocals track offers the choir voices' separation.
     await expect(tracks.getByRole('button', { name: 'Separar naipes' })).toBeVisible();

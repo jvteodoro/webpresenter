@@ -178,7 +178,7 @@ signals at the right moments, overtime, full-screen clock with the date, rest-sc
 
 ## Phases
 
-Status: phases A to E implemented. Phase B verified with the real worker (YouTube import and Demucs separation).
+Status: phases A to E implemented; phase F (section 7) in progress. Phase B verified with the real worker (YouTube import and Demucs separation).
 
 | Phase | Content |
 |---|---|
@@ -187,3 +187,31 @@ Status: phases A to E implemented. Phase B verified with the real worker (YouTub
 | **C** | Scenes in events; background music resolution (platform, event, scene, item); system settings (fades, duck level); player background engine and mixer channels; live mixer in operation mode. |
 | **D** | Clock (rest screen and item) and timer items with signals. |
 | **E** | Calendar and liturgy templates; events from templates with fixed and variable slots. |
+
+## 7. Separated tracks, choir voices and the GPU worker (phase F)
+
+The library keeps what processing produces: separating a song recording stores every track, not
+only the playback, so the same song serves the service (sung or playback), musicians (without a
+given instrument) and choir rehearsal (one voice at a time).
+
+- **Tracks**: recordings of kind `STEM` with the part they hold (`VOCALS`, `DRUMS`, `BASS`,
+  `OTHER`; choir voices `SOPRANO`, `ALTO`, `TENOR`, `BASS_VOICE`, `LEAD`, `VOCAL_PERCUSSION`) and
+  the recording they came from (`derived_from`, same timeline: the timing is copied and follows
+  later lyrics timing). Separation (`SEPARATE_PLAYBACK`) runs Demucs with its four stems and adds
+  the playback (their instruments summed). Running it again replaces the earlier tracks and their
+  media leave the library. Tracks can also be added by hand under a recording (rehearsal kits).
+- **Formats**: tracks of a lossless source (FLAC, WAV, ALAC…) are FLAC; otherwise AAC 160k (the
+  source was already lossy; AAC plays in every browser and phone).
+- **Track mixer** (song page): the recording's tracks play together outside any event, with mute,
+  solo and level per track and quick mixes (all, without voice, only voice, original); the lyrics
+  follow the timing. Separated tracks are not offered for presenting.
+- **Choir voices** (`SEPARATE_VOICES`, from the vocals track): the model is chosen by evaluation on
+  real recordings (`worker/tools/evaluate_voices.py`, `deploy/gpu-worker/eval`).
+- **Jobs with several results**: `outputs` (a presigned upload per name) in the job message and
+  `files` in the worker's `DONE` event.
+- **GPU worker**: heavy jobs (separation, recognition) have their own queue. A worker on a GPU
+  computer (`deploy/gpu-worker`) takes them at once; the CPU worker on the main server only after
+  `CPU_HEAVY_JOBS_AFTER` seconds, so it still covers them when the GPU computer is away. Remote
+  workers reach RabbitMQ and the media store through a relay listening on the VPN address only.
+  Measured: the full separation of a 4:53 song takes 1 min 43 s on a GTX 1050 Ti (Demucs about
+  30 s), against about 6 minutes on the server's CPU.

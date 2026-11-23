@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked, viewChild, viewChildren } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -82,6 +82,7 @@ export class SongPage {
   private readonly followed = new Set<string>();
 
   private readonly audio = viewChild<ElementRef<HTMLAudioElement>>('audio');
+  private readonly mixers = viewChildren(TrackMixer);
 
   protected readonly song = signal<SongDetail | null>(null);
   protected readonly loadError = signal(false);
@@ -269,6 +270,11 @@ export class SongPage {
     if (positionMs !== null) {
       this.audio()?.nativeElement.pause();
     }
+  }
+
+  /** The compact bar in the (sticky) player pauses the separated tracks wherever the page is scrolled. */
+  protected stopMixer(): void {
+    this.mixers().forEach((m) => m.stop());
   }
 
   protected separateVoices(recording: Recording): void {

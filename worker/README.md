@@ -27,12 +27,18 @@ It runs on CPU (several minutes per song) or on an NVIDIA GPU when PyTorch has C
 | `DEMUCS_DEVICE` | `cuda` if available | `cpu` or `cuda` |
 | `WHISPER_MODEL` | `medium` | lyrics recognition (`small` is faster, `large-v3` better and slower) |
 | `LYRICS_SEPARATE` | `1` | isolate the vocals with Demucs before recognizing (`0` skips it) |
+| `DEMUCS_SEGMENT` | model's | seconds per Demucs chunk (less GPU memory) |
+| `TRACK_BITRATE` | `160k` | AAC bitrate of separated tracks from lossy sources (lossless sources give FLAC) |
+| `JOB_KINDS` | `all` | `light` (imports) or `heavy` (separation, recognition) only |
+| `HEAVY_JOBS_AFTER` | `0` | seconds a heavy job must have waited before this worker takes it (CPU workers next to a GPU worker) |
+| `MEDIA_STORE_ADDRESS` | | workers on another computer: where work links go (the relay), with their original Host |
 
 ## Protocol
 
 Plain JSON (UTF-8) messages.
 
-**`webpresenter.jobs`** (durable queue, server → worker). The worker takes one job at a time
+**`webpresenter.jobs`** and **`webpresenter.jobs.heavy`** (durable queues, server → worker; heavy:
+separation and recognition, which GPU workers take first). The worker takes one job at a time
 (`basic_get`) and acknowledges it at once: jobs can outlast RabbitMQ's delivery timeout. A worker
 that dies stops reporting and the server fails the job after 15 minutes (it can be retried).
 
@@ -44,6 +50,11 @@ that dies stops reporting and the server fails the job after 15 minutes (it can 
   "params": { "songId": "…", "recordingId": "…", "mediaId": "…" },
   "inputUrl": "http://…presigned GET…", "outputUrl": "http://…presigned PUT…" }
 ```
+
+Jobs with several results (`SEPARATE_PLAYBACK`: `playback`, `vocals`, `drums`, `bass`, `other`;
+`SEPARATE_VOICES`: `soprano`, `alto`, `tenor`, `bass_voice`, `lead`, `vocal_percussion`) also carry
+`"outputs": {"<name>": "presigned PUT", …}`; the worker uploads the ones it produced and lists them
+in `DONE` as `"files": {"<name>": "<file name>", …}`.
 
 **`webpresenter.job-events`** (durable queue, worker → server): progress at most once a second
 and at least every 30 s (heartbeat), then the outcome. The result file is uploaded to `outputUrl`

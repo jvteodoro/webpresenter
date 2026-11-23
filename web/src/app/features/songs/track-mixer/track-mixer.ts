@@ -143,6 +143,13 @@ export class TrackMixer {
     inject(DestroyRef).onDestroy(() => this.dispose());
   }
 
+  /** Pauses the tracks (from outside, e.g. the page's player bar). */
+  stop(): void {
+    if (this.playing()) {
+      this.pause();
+    }
+  }
+
   protected hasPart(part: StemPart): boolean {
     return this.channels().some((c) => c.recording.part === part);
   }

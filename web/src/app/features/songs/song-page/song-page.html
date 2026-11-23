@@ -31,7 +31,14 @@
         }
       </mat-button-toggle-group>
       @if (audioUrl(); as url) {
-        <audio #audio [src]="url" controls preload="metadata" (timeupdate)="onTime()" (seeked)="onTime()"></audio>
+        <audio #audio [src]="url" controls preload="metadata" (timeupdate)="onTime()" (seeked)="onTime()"
+               [hidden]="!!mixer()"></audio>
+      }
+      @if (mixer(); as m) {
+        <div class="mixer-bar" role="status">
+          <button mat-icon-button (click)="stopMixer()" aria-label="Pausar as faixas separadas"><mat-icon>pause</mat-icon></button>
+          <span>Faixas separadas · {{ m.positionMs | duration }}</span>
+        </div>
       }
       @if (recording(); as r) {
         <p class="timing-state">
@@ -46,6 +53,8 @@
           }
         </p>
       }
+    </section>
+    <section class="processing" aria-label="Processamento">
       @for (job of songJobs(); track job.id) {
         @if (job.status === 'QUEUED' || job.status === 'RUNNING') {
           <div class="generation" role="status">
@@ -59,13 +68,6 @@
         } @else if (job.status === 'FAILED') {
           <p class="generation-failed" role="alert"><mat-icon>error</mat-icon> A geração de {{ jobLabel(job) }} falhou: {{ job.message }}. <a routerLink="/fila">Ver fila</a></p>
         }
-      }
-      @for (g of trackGroups(); track g.source.id) {
-        <div class="tracks" role="group" [attr.aria-label]="'Faixas separadas de ' + recordingLabels[g.source.kind]">
-          <h2>Faixas separadas · {{ recordingLabels[g.source.kind] }}</h2>
-          <app-track-mixer [group]="g" [canSeparateVoices]="currentUser.canEditSongs()" [separatingVoices]="separatingVoices()"
-                           (position)="onMixerPosition(g.source.id, $event)" (separateVoices)="separateVoices($event)" />
-        </div>
       }
       @if (recording(); as r) {
         @if (r.kind !== 'PLAYBACK' && currentUser.canEditSongs()) {
@@ -86,6 +88,14 @@
           </div>
         }
       }
+    </section>
+  }
+
+  @for (g of trackGroups(); track g.source.id) {
+    <section class="card tracks" [attr.aria-label]="'Faixas separadas de ' + recordingLabels[g.source.kind]" role="group">
+      <h2 class="section-title">Faixas separadas · {{ recordingLabels[g.source.kind] }}</h2>
+      <app-track-mixer [group]="g" [canSeparateVoices]="currentUser.canEditSongs()" [separatingVoices]="separatingVoices()"
+                       (position)="onMixerPosition(g.source.id, $event)" (separateVoices)="separateVoices($event)" />
     </section>
   }
 
