@@ -69,6 +69,18 @@ class ChorusVariantsTest(unittest.TestCase):
         self.assertEqual(3, parsed["order"].count(chorus[0]["id"]))
 
 
+class HintTest(unittest.TestCase):
+    def test_the_song_name_without_artist_or_notes(self):
+        self.assertEqual("Vinde a Mim", lyrics.song_name("Vinde a Mim - Nova Voz"))
+        self.assertEqual("Castelo Forte", lyrics.song_name("Castelo Forte (ao vivo)"))
+        self.assertEqual("Quem Ouvir as Novas", lyrics.song_name("Quem Ouvir as Novas"))
+
+    def test_a_leaked_title_is_recognized_but_sung_words_are_not(self):
+        self.assertTrue(lyrics.leaked("Vinde a Mim - Nova Voz. Vinde a Mim - Nova Voz", "Vinde a Mim - Nova Voz"))
+        self.assertFalse(lyrics.leaked("Ao ouvir tua voz a dizer, Vinde a Mim", "Vinde a Mim - Nova Voz"))
+        self.assertFalse(lyrics.leaked("Castelo forte", "Castelo Forte"))
+
+
 class AlignTest(unittest.TestCase):
     def test_known_lyrics_find_their_times_despite_recognition_errors(self):
         heard = sung("vinde a mim os cansado", 12.0) + sung("eu vos aliviarei", 15.0) \

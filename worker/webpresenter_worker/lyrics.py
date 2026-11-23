@@ -75,10 +75,12 @@ def recognize(audio_path: str, model_name: str, language: str, progress, hint: s
     from faster_whisper import WhisperModel
 
     model = WhisperModel(model_name, device="auto", compute_type="int8")
+    words_hint = song_name(hint)
     segments, info = model.transcribe(audio_path, language=language, word_timestamps=True, vad_filter=False,
                                       condition_on_previous_text=False, beam_size=5,
-                                      # The title as a hint for its words (an initial prompt leaks into the text).
-                                      hotwords=hint or None)
+                                      # The song's name helps with its own words (an initial prompt leaks
+                                      # into the text; the artist part of a title does too).
+                                      hotwords=words_hint or None)
     words: list[Word] = []
     duration = max(1.0, info.duration)
     for segment in segments:
@@ -86,6 +88,8 @@ def recognize(audio_path: str, model_name: str, language: str, progress, hint: s
         text = segment.text.strip()
         if segment.no_speech_prob > 0.6 or len(normalize(text)) < 3 or segment.compression_ratio > 2.6:
             continue  # noise, hallucination or repetition loop
+        if hint and leaked(text, hint):
+            continue  # the hint itself, "heard" where the singing was unclear
         first = True
         for w in segment.words or []:
             t = w.word.strip()
@@ -93,6 +97,21 @@ def recognize(audio_path: str, model_name: str, language: str, progress, hint: s
                 words.append(Word(t, float(w.start), float(w.end), phrase_start=first, probability=float(w.probability)))
                 first = False
     return words
+
+
+def song_name(title: str | None) -> str | None:
+    """The song's own name from a title like "Vinde a Mim - Nova Voz" or "Castelo Forte (ao vivo)"."""
+    if not title:
+        return None
+    name = re.split(r"\s[-–—|]\s|\(|\[", title)[0].strip()
+    return name or None
+
+
+def leaked(text: str, title: str) -> bool:
+    """A segment that is the full title (once or repeated), not something sung."""
+    t, full = normalize(text), normalize(title)
+    name = normalize(song_name(title) or "")
+    return bool(full) and full != name and full in t and len(t.replace(full, "").split()) <= 2
 
 
 # ---------------------------------------------------------------------- transcribe mode
