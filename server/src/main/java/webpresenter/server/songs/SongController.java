@@ -121,8 +121,12 @@ class SongController {
 
     record MediaRef(UUID id, String title, MediaKind kind, Long durationMs) {}
 
+    /**
+     * @param part what a separated track holds (STEM only)
+     * @param derivedFrom the recording it was separated from (same timeline), or null
+     */
     record RecordingView(UUID id, RecordingKind kind, Source source, MediaRef media, Timing timing,
-            boolean timingCurrent) {}
+            boolean timingCurrent, StemPart part, UUID derivedFrom) {}
 
     record SongDetail(UUID id, String title, String alternativeTitles, String language, String authors,
             String copyright, SongStatus status, Source source, String origin, String externalId,
@@ -143,7 +147,8 @@ class SongController {
         List<RecordingView> recordings = song.recordings().stream().map(r -> {
             Timing timing = service.timing(r);
             return new RecordingView(r.id(), r.kind(), r.source(), media(r.mediaId()), timing,
-                    timing != null && java.util.Objects.equals(timing.lyricsVersion(), song.lyricsVersion()));
+                    timing != null && java.util.Objects.equals(timing.lyricsVersion(), song.lyricsVersion()), r.part(),
+                    r.derivedFrom());
         }).toList();
         return new SongDetail(song.id(), song.title(), song.alternativeTitles(), song.language(), song.authors(),
                 song.copyright(), song.status(), song.source(), song.origin(), song.externalId(),

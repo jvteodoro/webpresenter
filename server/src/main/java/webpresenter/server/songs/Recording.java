@@ -40,14 +40,36 @@ class Recording {
     @JdbcTypeCode(SqlTypes.JSON)
     private String timing;
 
+    /** For {@code STEM} recordings: what the track holds. */
+    @Enumerated(EnumType.STRING)
+    private StemPart part;
+
+    /** The recording this one was separated from (same timeline), or null. */
+    @Column(name = "derived_from")
+    private UUID derivedFrom;
+
     protected Recording() {}
 
     Recording(Song song, RecordingKind kind, UUID mediaId, Source source) {
+        this(song, kind, mediaId, source, null, null);
+    }
+
+    Recording(Song song, RecordingKind kind, UUID mediaId, Source source, StemPart part, UUID derivedFrom) {
+        if ((kind == RecordingKind.STEM) != (part != null)) {
+            throw new IllegalArgumentException("a separated track (STEM) needs its part, other recordings none");
+        }
         this.id = UUID.randomUUID();
         this.song = song;
         this.kind = kind;
         this.mediaId = mediaId;
         this.source = source;
+        this.part = part;
+        this.derivedFrom = derivedFrom;
+    }
+
+    /** The recording it came from was removed. */
+    void forgetOrigin() {
+        this.derivedFrom = null;
     }
 
     void setTiming(String json) {
@@ -59,4 +81,6 @@ class Recording {
     UUID mediaId() { return mediaId; }
     Source source() { return source; }
     String timingJson() { return timing; }
+    StemPart part() { return part; }
+    UUID derivedFrom() { return derivedFrom; }
 }

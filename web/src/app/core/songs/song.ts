@@ -1,7 +1,8 @@
 import { MediaKind } from '../media/media';
 
 export type PartKind = 'VERSE' | 'CHORUS' | 'PRE_CHORUS' | 'BRIDGE' | 'INTRO' | 'OUTRO' | 'TAG' | 'INSTRUMENTAL' | 'OTHER';
-export type RecordingKind = 'SUNG' | 'PLAYBACK' | 'OTHER';
+export type RecordingKind = 'SUNG' | 'PLAYBACK' | 'OTHER' | 'STEM';
+export type StemPart = 'VOCALS' | 'DRUMS' | 'BASS' | 'OTHER' | 'LEAD' | 'SOPRANO' | 'ALTO' | 'TENOR' | 'BASS_VOICE' | 'VOCAL_PERCUSSION';
 export type Source = 'MANUAL' | 'IMPORT' | 'PIPELINE';
 export type SongStatus = 'DRAFT' | 'READY';
 
@@ -58,6 +59,10 @@ export interface Recording {
   media: MediaRef;
   timing: Timing | null;
   timingCurrent: boolean;
+  /** What a separated track (STEM) holds. */
+  part: StemPart | null;
+  /** The recording it was separated from (same timeline). */
+  derivedFrom: string | null;
 }
 
 export interface CollectionRef {
@@ -132,6 +137,12 @@ export const RECORDING_LABELS: Record<RecordingKind, string> = {
   SUNG: 'Cantado',
   PLAYBACK: 'Playback',
   OTHER: 'Outra',
+  STEM: 'Faixa separada',
+};
+
+export const STEM_LABELS: Record<StemPart, string> = {
+  VOCALS: 'Voz', DRUMS: 'Bateria', BASS: 'Baixo', OTHER: 'Outros instrumentos', LEAD: 'Solista',
+  SOPRANO: 'Soprano', ALTO: 'Contralto', TENOR: 'Tenor', BASS_VOICE: 'Baixo (voz)', VOCAL_PERCUSSION: 'Percussão vocal',
 };
 
 export function inputOf(song: SongDetail, changes: Partial<SongInput> = {}): SongInput {

@@ -138,7 +138,11 @@ class Song {
     }
 
     Recording addRecording(RecordingKind kind, UUID mediaId, Source source) {
-        Recording recording = new Recording(this, kind, mediaId, source);
+        return addRecording(kind, mediaId, source, null, null);
+    }
+
+    Recording addRecording(RecordingKind kind, UUID mediaId, Source source, StemPart part, UUID derivedFrom) {
+        Recording recording = new Recording(this, kind, mediaId, source, part, derivedFrom);
         recordings.add(recording);
         return recording;
     }

@@ -17,6 +17,11 @@ export class JobsApi {
     return this.http.post<Job>(`${this.baseUrl}/separate-playback`, { songId, recordingId });
   }
 
+  /** Choir voices (soprano, alto, tenor, bass…) of the vocals track. */
+  separateVoices(songId: string, recordingId: string): Observable<Job> {
+    return this.http.post<Job>(`${this.baseUrl}/separate-voices`, { songId, recordingId });
+  }
+
   /** Lyrics (when the song has none) and slide times from a sung recording. */
   transcribeLyrics(songId: string, recordingId: string, fresh = false): Observable<Job> {
     return this.http.post<Job>(`${this.baseUrl}/transcribe-lyrics`, { songId, recordingId, fresh });

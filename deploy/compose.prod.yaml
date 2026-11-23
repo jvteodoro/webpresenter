@@ -122,9 +122,11 @@ services:
         condition: service_healthy
 
   rabbitmq:
-    # Job queue between the server and the workers. Internal only (no published ports).
+    # Job queue between the server and the workers. Published on the loopback only, for the relay.
     image: rabbitmq:4.1.4-management-alpine
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:${AMQP_LOCAL_PORT:-18672}:5672"
     environment:
       RABBITMQ_DEFAULT_USER: webpresenter
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
@@ -145,6 +147,9 @@ services:
     restart: unless-stopped
     environment:
       RABBITMQ_URL: amqp://webpresenter:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2F
+      # With a GPU worker (deploy/gpu-worker), heavy jobs wait this long for it before this CPU
+      # worker takes them (0: at once).
+      HEAVY_JOBS_AFTER: ${CPU_HEAVY_JOBS_AFTER:-0}
     volumes:
       - worker-models:/models
     depends_on:
@@ -172,6 +177,23 @@ services:
     depends_on:
       - server
       - keycloak
+
+  # Workers on other computers (a GPU machine, deploy/gpu-worker) reach the job queue and the media
+  # store through this relay, on the VPN address only. Enabled with --profile remote-workers.
+  relay:
+    profiles: ["remote-workers"]
+    build:
+      context: ./relay
+    image: webpresenter-relay:latest
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      RELAY_ADDRESS: ${RELAY_ADDRESS:-}
+      AMQP_LOCAL_PORT: ${AMQP_LOCAL_PORT:-18672}
+      S3_LOCAL_PORT: ${S3_LOCAL_PORT:-18333}
+    depends_on:
+      - rabbitmq
+      - seaweedfs
 
   # Announces this computer on the LAN, whatever its current address: the mDNS name PUBLIC_NAME
   # (browsers) and UDP broadcasts on BEACON_PORT that MediaPlayers listen to. Host networking:

@@ -251,7 +251,7 @@ export class SongPage {
   }
 
   protected jobLabel(job: Job): string {
-    return job.type === 'SEPARATE_PLAYBACK' ? 'playback sem voz' : 'letra e tempos';
+    return job.type === 'SEPARATE_PLAYBACK' ? 'faixas separadas' : job.type === 'SEPARATE_VOICES' ? 'naipes' : 'letra e tempos';
   }
 
   private load(id: string): void {
@@ -262,7 +262,7 @@ export class SongPage {
         next: (song) => {
           this.song.set(song);
           this.loadError.set(false);
-          const first = song.recordings.find((r) => r.kind === 'SUNG') ?? song.recordings[0];
+          const first = song.recordings.find((r) => r.kind === 'SUNG') ?? song.recordings.find((r) => r.kind !== 'STEM');
           if (first && !this.selectedRecordingId()) {
             this.selectRecording(first.id);
           }

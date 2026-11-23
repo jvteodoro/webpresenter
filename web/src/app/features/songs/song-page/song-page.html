@@ -23,9 +23,11 @@
     <section class="card player" aria-label="Gravações">
       <mat-button-toggle-group [value]="selectedRecordingId()" (change)="selectRecording($event.value)" hideSingleSelectionIndicator>
         @for (r of s.recordings; track r.id) {
+          @if (r.kind !== 'STEM') {
           <mat-button-toggle [value]="r.id">
             {{ recordingLabels[r.kind] }} · {{ r.media.durationMs | duration }}
           </mat-button-toggle>
+          }
         }
       </mat-button-toggle-group>
       @if (audioUrl(); as url) {
@@ -63,7 +65,7 @@
           <div class="generate-actions">
             @if (!generating()) {
               <button mat-stroked-button (click)="generatePlayback(r)">
-                <mat-icon>graphic_eq</mat-icon> Gerar playback sem voz
+                <mat-icon>graphic_eq</mat-icon> Separar faixas (voz, instrumentos e playback)
               </button>
             }
             @if (!transcribing()) {

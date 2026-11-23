@@ -41,9 +41,14 @@ class Reporter:
 
 @dataclass
 class Result:
-    path: Path
-    filename: str
+    path: Path | None
+    filename: str | None
     title: str | None = None
+    files: dict[str, Path] | None = None  # several results: output name -> file
+
+
+def many(files: dict[str, Path]) -> Result:
+    return Result(None, None, None, files)
 
 
 # ---------------------------------------------------------------------- transfer helpers
@@ -145,17 +150,40 @@ def youtube_import(job: JobRequest, workdir: Path, report: Reporter) -> Result:
 TQDM_PERCENT = re.compile(r"(\d{1,3})%\|")
 
 
-def run_demucs(source: Path, workdir: Path, report: Reporter, start: int, end: int, label: str) -> dict[str, Path]:
-    """Splits vocals from the rest with Demucs; returns {"vocals": …, "no_vocals": …} (WAV)."""
+def run_demucs(source: Path, workdir: Path, report: Reporter, start: int, end: int, label: str,
+               two_stems: bool = True, int24: bool = False) -> dict[str, Path]:
+    """
+    Separates a recording with Demucs (WAV results). Two stems: {"vocals", "no_vocals"}; otherwise
+    the model's four: {"vocals", "drums", "bass", "other"}.
+    """
     model = os.environ.get("DEMUCS_MODEL", "htdemucs")
-    command = [sys.executable, "-m", "webpresenter_worker.demucs_runner", "--two-stems", "vocals", "-n", model,
-               "-o", str(workdir / "out"), str(source)]
+    out = workdir / ("out" if two_stems else "stems")
+    command = [sys.executable, "-m", "webpresenter_worker.demucs_runner", "-n", model, "-o", str(out)]
+    if two_stems:
+        command += ["--two-stems", "vocals"]
+    if int24:
+        command += ["--int24"]
     device = os.environ.get("DEMUCS_DEVICE")  # cpu or cuda; default: cuda when available
     if device:
         command += ["-d", device]
+    segment = os.environ.get("DEMUCS_SEGMENT")  # seconds per chunk: less GPU memory (e.g. 7 on 4 GB)
+    if segment:
+        command += ["--segment", segment]
+    command.append(str(source))
     report.progress(start, f"{label} (pode levar alguns minutos)")
+    run_with_progress(command, report, start, end, label, "O Demucs falhou")
+    stems = {p.stem: p for p in out.glob("*/*/*.wav")}
+    expected = {"vocals", "no_vocals"} if two_stems else {"vocals", "drums", "bass", "other"}
+    if not expected <= stems.keys():
+        raise JobFailed("O Demucs não gerou as faixas separadas")
+    return stems
+
+
+def run_with_progress(command: list[str], report: Reporter, start: int, end: int, label: str, failure: str,
+                      env: dict[str, str] | None = None) -> None:
+    """Runs a tool that prints tqdm progress bars, mapping its percentage to start..end."""
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
-                               errors="replace")
+                               errors="replace", env=env)
     tail: list[str] = []
     watcher = threading.Thread(target=_kill_on_cancel, args=(process, report.cancelled), daemon=True)
     watcher.start()
@@ -179,27 +207,64 @@ def run_demucs(source: Path, workdir: Path, report: Reporter, start: int, end: i
     code = process.wait()
     report.check()
     if code != 0:
-        raise JobFailed(f"O Demucs falhou: {_failure(code, tail)}")
-    stems = {p.stem: p for p in (workdir / "out").glob("*/*/*.wav")}
-    if "vocals" not in stems or "no_vocals" not in stems:
-        raise JobFailed("O Demucs não gerou as faixas separadas")
-    return stems
+        raise JobFailed(f"{failure}: {_failure(code, tail)}")
+
+
+# Codecs that keep every bit: a source like this keeps its separated tracks lossless (FLAC).
+LOSSLESS = {"flac", "alac", "wavpack", "ape", "tta", "mlp", "truehd"}
+
+
+def is_lossless(path: Path) -> bool:
+    probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_name",
+                            "-of", "json", str(path)], capture_output=True, text=True)
+    try:
+        codec = json.loads(probe.stdout)["streams"][0]["codec_name"]
+    except (ValueError, KeyError, IndexError):
+        return False
+    return codec in LOSSLESS or codec.startswith("pcm_")
+
+
+def encode_track(inputs: list[Path], target_stem: Path, lossless: bool) -> Path:
+    """
+    One track from one or more WAV files (summed, as the model's stems add up to the mix): FLAC
+    when the source was lossless, otherwise AAC (TRACK_BITRATE, default 160k; the source was already
+    lossy, so a lossless copy would only take space). AAC in MP4 plays in every browser and phone.
+    """
+    target = target_stem.with_suffix(".flac" if lossless else ".m4a")
+    command = ["ffmpeg", "-v", "error", "-y"]
+    for path in inputs:
+        command += ["-i", str(path)]
+    if len(inputs) > 1:
+        command += ["-filter_complex", f"amix=inputs={len(inputs)}:normalize=0"]
+    if lossless:
+        command += ["-c:a", "flac", "-compression_level", "8"]
+    else:
+        command += ["-c:a", "aac", "-b:a", os.environ.get("TRACK_BITRATE", "160k"), "-movflags", "+faststart"]
+    encode = subprocess.run(command + [str(target)], capture_output=True, text=True)
+    if encode.returncode != 0:
+        raise JobFailed(f"Não foi possível codificar {target_stem.name}: {encode.stderr.strip()[:300]}")
+    return target
 
 
 def separate_playback(job: JobRequest, workdir: Path, report: Reporter) -> Result:
+    """
+    Separates a song recording into its tracks: vocals, drums, bass and other instruments, plus the
+    playback (everything but the vocals).
+    """
     if not job.input_url:
         raise JobFailed("Trabalho sem arquivo de entrada")
     source = workdir / "input"
     report.progress(1, "Baixando a gravação")
     download(job.input_url, source, report, 1, 8, "Baixando a gravação")
-    stems = run_demucs(source, workdir, report, 10, 88, "Separando as vozes")
-    report.progress(90, "Codificando o playback")
-    target = workdir / "playback.m4a"
-    encode = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(stems["no_vocals"]), "-c:a", "aac", "-b:a", "192k",
-                             "-movflags", "+faststart", str(target)], capture_output=True, text=True)
-    if encode.returncode != 0:
-        raise JobFailed(f"Não foi possível codificar o playback: {encode.stderr.strip()[:300]}")
-    return Result(target, "playback.m4a")
+    lossless = is_lossless(source)
+    stems = run_demucs(source, workdir, report, 10, 86, "Separando as faixas", two_stems=False, int24=lossless)
+    report.progress(88, "Codificando as faixas")
+    files = {name: encode_track([stems[name]], workdir / name, lossless) for name in ("vocals", "drums", "bass", "other")}
+    files["playback"] = encode_track([stems["drums"], stems["bass"], stems["other"]], workdir / "playback", lossless)
+    report.check()
+    if not job.outputs:  # a server from before separated tracks: only the playback
+        return Result(files["playback"], files["playback"].name)
+    return many(files)
 
 
 # ---------------------------------------------------------------------- lyrics and timing

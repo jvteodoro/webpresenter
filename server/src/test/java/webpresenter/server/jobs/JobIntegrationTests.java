@@ -16,6 +16,7 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.BeforeEach;
@@ -104,8 +105,8 @@ class JobIntegrationTests {
     }
 
     @Test
-    void separatesVocalsIntoAPlaybackRecordingWithTheSameTiming() throws Exception {
-        String sung = upload(TestMedia.tone(dir, 300 + (int) (System.nanoTime() % 400)), "cantada.m4a", "SONG_AUDIO");
+    void separatesTracksWithTheSameTimingAndReplacesThemWhenRunAgain() throws Exception {
+        String sung = upload(tone(), "cantada.m4a", "SONG_AUDIO");
         UUID song = id(send(post("/api/songs"), "{\"title\":\"Separar vozes\",\"lyrics\":" + LYRICS + "}"));
         JsonNode created = body(send(post("/api/songs/" + song + "/recordings"), """
                 {"kind":"SUNG","mediaId":"%s","timing":{"source":"IMPORT","reviewed":true,
@@ -116,42 +117,103 @@ class JobIntegrationTests {
                 .formatted(song, recording))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("QUEUED"))
-                .andExpect(jsonPath("$.title").value("Playback sem voz · Separar vozes")));
+                .andExpect(jsonPath("$.title").value("Separar faixas · Separar vozes")));
 
-        // The worker downloads the sung recording and uploads its result through the presigned links.
+        // The worker downloads the sung recording and uploads each track through its presigned link.
         var request = queue.last(job);
         assertThat(request.type()).isEqualTo(JobType.SEPARATE_PLAYBACK);
+        assertThat(request.outputs()).containsOnlyKeys("playback", "vocals", "drums", "bass", "other");
         HttpResponse<byte[]> input = http.send(HttpRequest.newBuilder(URI.create(request.inputUrl())).build(),
                 HttpResponse.BodyHandlers.ofByteArray());
         assertThat(input.statusCode()).isEqualTo(200);
         assertThat(input.body()).hasSizeGreaterThan(1000);
 
-        jobs.onWorkerEvent(new WorkerMessages.WorkerEvent(job, 1, "RUNNING", 40, "Separando vozes", null, null));
+        jobs.onWorkerEvent(new WorkerMessages.WorkerEvent(job, 1, "RUNNING", 40, "Separando as faixas", null, null));
         mvc.perform(get("/api/jobs/" + job).with(user("musico", "MUSICIAN")))
                 .andExpect(jsonPath("$.status").value("RUNNING"))
                 .andExpect(jsonPath("$.progress").value(40))
-                .andExpect(jsonPath("$.message").value("Separando vozes"));
+                .andExpect(jsonPath("$.message").value("Separando as faixas"));
 
-        putResult(request, TestMedia.tone(dir, 900 + (int) (System.nanoTime() % 400)));
-        jobs.onWorkerEvent(new WorkerMessages.WorkerEvent(job, 1, "DONE", 100, null, "no_vocals.m4a", null));
-
+        finishTracks(job, request, "playback", "vocals", "drums", "bass", "other");
         JsonNode done = body(mvc.perform(get("/api/jobs/" + job).with(tech())));
         assertThat(done.get("status").asString()).isEqualTo("DONE");
-        String playback = done.get("result").get("recordingId").asString();
+        assertThat(done.get("result").get("recordingIds")).hasSize(5);
 
         JsonNode detail = body(mvc.perform(get("/api/songs/" + song).with(tech())));
-        JsonNode generated = detail.get("recordings").valueStream()
-                .filter(r -> r.get("id").asString().equals(playback)).findFirst().orElseThrow();
-        assertThat(generated.get("kind").asString()).isEqualTo("PLAYBACK");
-        assertThat(generated.get("source").asString()).isEqualTo("PIPELINE");
-        assertThat(generated.get("media").get("title").asString()).isEqualTo("Separar vozes (playback gerado)");
-        assertThat(generated.get("timing").get("reviewed").asBoolean()).isFalse();
-        assertThat(generated.get("timing").get("cues").get(1).get("startMs").asLong()).isEqualTo(5000);
-        assertThat(generated.get("timingCurrent").asBoolean()).isTrue();
+        JsonNode playback = track(detail, "PLAYBACK", null);
+        assertThat(playback.get("source").asString()).isEqualTo("PIPELINE");
+        assertThat(playback.get("media").get("title").asString()).isEqualTo("Separar vozes (playback gerado)");
+        assertThat(playback.get("derivedFrom").asString()).isEqualTo(recording.toString());
+        for (String part : List.of("VOCALS", "DRUMS", "BASS", "OTHER")) {
+            JsonNode stem = track(detail, "STEM", part);
+            assertThat(stem.get("derivedFrom").asString()).isEqualTo(recording.toString());
+            assertThat(stem.get("timing").get("reviewed").asBoolean()).isFalse();
+            assertThat(stem.get("timing").get("cues").get(1).get("startMs").asLong()).isEqualTo(5000);
+            assertThat(stem.get("timingCurrent").asBoolean()).isTrue();
+        }
+        assertThat(track(detail, "STEM", "VOCALS").get("media").get("title").asString()).isEqualTo("Separar vozes (voz)");
+        String oldVocalsMedia = track(detail, "STEM", "VOCALS").get("media").get("id").asString();
 
-        // A playback cannot be separated again.
-        send(post("/api/jobs/separate-playback"), "{\"songId\":\"%s\",\"recordingId\":\"%s\"}".formatted(song, playback))
-                .andExpect(status().isBadRequest());
+        // A playback or a separated track cannot be separated again.
+        send(post("/api/jobs/separate-playback"), "{\"songId\":\"%s\",\"recordingId\":\"%s\"}"
+                .formatted(song, playback.get("id").asString())).andExpect(status().isBadRequest());
+        send(post("/api/jobs/separate-playback"), "{\"songId\":\"%s\",\"recordingId\":\"%s\"}"
+                .formatted(song, track(detail, "STEM", "DRUMS").get("id").asString())).andExpect(status().isBadRequest());
+
+        // Running it again replaces the tracks; their old media leave the library.
+        UUID again = id(send(post("/api/jobs/separate-playback"), "{\"songId\":\"%s\",\"recordingId\":\"%s\"}"
+                .formatted(song, recording)));
+        finishTracks(again, queue.last(again), "playback", "vocals", "drums", "bass", "other");
+        JsonNode rerun = body(mvc.perform(get("/api/jobs/" + again).with(tech())));
+        assertThat(rerun.get("result").get("replaced").asInt()).isEqualTo(5);
+        detail = body(mvc.perform(get("/api/songs/" + song).with(tech())));
+        assertThat(detail.get("recordings")).hasSize(6);
+        mvc.perform(get("/api/media/" + oldVocalsMedia).with(tech())).andExpect(status().isNotFound());
+
+        // Choir voices come from the vocals track, not from instruments.
+        String vocals = track(detail, "STEM", "VOCALS").get("id").asString();
+        send(post("/api/jobs/separate-voices"), "{\"songId\":\"%s\",\"recordingId\":\"%s\"}"
+                .formatted(song, track(detail, "STEM", "BASS").get("id").asString())).andExpect(status().isBadRequest());
+        UUID voices = id(send(post("/api/jobs/separate-voices"), "{\"songId\":\"%s\",\"recordingId\":\"%s\"}"
+                .formatted(song, vocals))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.title").value("Separar naipes · Separar vozes")));
+        var voicesRequest = queue.last(voices);
+        assertThat(voicesRequest.outputs()).containsKeys("soprano", "alto", "tenor", "bass_voice");
+        finishTracks(voices, voicesRequest, "soprano", "alto", "tenor", "bass_voice");
+        detail = body(mvc.perform(get("/api/songs/" + song).with(tech())));
+        JsonNode soprano = track(detail, "STEM", "SOPRANO");
+        assertThat(soprano.get("derivedFrom").asString()).isEqualTo(vocals);
+        assertThat(soprano.get("media").get("title").asString()).isEqualTo("Separar vozes (soprano)");
+        assertThat(soprano.get("timing").get("cues").get(1).get("startMs").asLong()).isEqualTo(5000);
+        assertThat(track(detail, "STEM", "BASS_VOICE")).isNotNull();
+    }
+
+    /** The worker uploads a file per output and reports them. */
+    private void finishTracks(UUID job, WorkerMessages.JobRequest request, String... names) throws Exception {
+        Map<String, String> files = new java.util.LinkedHashMap<>();
+        for (String name : names) {
+            HttpResponse<Void> response = http.send(HttpRequest.newBuilder(URI.create(request.outputs().get(name)))
+                    .PUT(HttpRequest.BodyPublishers.ofFile(tone())).build(), HttpResponse.BodyHandlers.discarding());
+            assertThat(response.statusCode()).isEqualTo(200);
+            files.put(name, name + ".m4a");
+        }
+        jobs.onWorkerEvent(new WorkerMessages.WorkerEvent(job, request.attempt(), "DONE", 100, null, null, null, files));
+    }
+
+    private static JsonNode track(JsonNode detail, String kind, String part) {
+        return detail.get("recordings").valueStream()
+                .filter(r -> r.get("kind").asString().equals(kind)
+                        && (part == null || part.equals(r.path("part").asString(null))))
+                .findFirst().orElseThrow(() -> new AssertionError("no " + kind + " " + part));
+    }
+
+    private static final java.util.concurrent.atomic.AtomicInteger TONES =
+            new java.util.concurrent.atomic.AtomicInteger((int) (System.nanoTime() % 1000));
+
+    /** A distinct tone each time (the library refuses duplicates by content). */
+    private Path tone() {
+        return TestMedia.tone(dir, 2000 + TONES.getAndAdd(7));
     }
 
     @Test

@@ -85,7 +85,13 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
 
     record CollectionInput(String slug, String name, String group, String number) {}
 
-    record RecordingInput(RecordingKind kind, UUID mediaId, Source source, Timing timing) {}
+    /** @param part what a separated track (STEM) holds; required for that kind only */
+    record RecordingInput(RecordingKind kind, UUID mediaId, Source source, Timing timing, StemPart part) {
+
+        RecordingInput(RecordingKind kind, UUID mediaId, Source source, Timing timing) {
+            this(kind, mediaId, source, timing, null);
+        }
+    }
 
     @Transactional
     Song create(SongInput input, Source source) {
@@ -111,8 +117,11 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
     Song addRecording(UUID songId, RecordingInput input) {
         Song song = findSong(songId);
         requireMedia(input.mediaId(), MediaKind.AUDIO, MediaKind.VIDEO);
+        if (input.kind() == null || (input.kind() == RecordingKind.STEM) != (input.part() != null)) {
+            throw new InvalidSongException("a separated track (STEM) needs its part; other kinds take none");
+        }
         Recording recording = song.addRecording(input.kind(), input.mediaId(),
-                input.source() == null ? Source.MANUAL : input.source());
+                input.source() == null ? Source.MANUAL : input.source(), input.part(), null);
         if (input.timing() != null) {
             recording.setTiming(timingJson(song, input.timing()));
         }
@@ -123,19 +132,70 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
     @Override
     @Transactional
     public UUID addGeneratedPlayback(UUID songId, UUID sourceRecordingId, UUID mediaId) {
+        return addSeparatedTracks(songId, sourceRecordingId, mediaId, java.util.Map.of()).recordingIds().getFirst();
+    }
+
+    @Override
+    @Transactional
+    public SeparatedTracks addSeparatedTracks(UUID songId, UUID sourceRecordingId, UUID playbackMediaId,
+            java.util.Map<StemPart, UUID> stems) {
         Song song = findSong(songId);
         Recording source = song.recording(sourceRecordingId);
-        requireMedia(mediaId, MediaKind.AUDIO, MediaKind.VIDEO);
-        Recording recording = song.addRecording(RecordingKind.PLAYBACK, mediaId, Source.PIPELINE);
+        if (playbackMediaId != null) {
+            requireMedia(playbackMediaId, MediaKind.AUDIO, MediaKind.VIDEO);
+        }
+        stems.values().forEach(m -> requireMedia(m, MediaKind.AUDIO, MediaKind.VIDEO));
+        // Earlier results for the same source and parts are replaced.
+        List<Recording> replaced = song.recordings().stream()
+                .filter(r -> r.source() == Source.PIPELINE && sourceRecordingId.equals(r.derivedFrom()))
+                .filter(r -> (r.kind() == RecordingKind.PLAYBACK && playbackMediaId != null)
+                        || (r.kind() == RecordingKind.STEM && stems.containsKey(r.part())))
+                .toList();
+        java.util.Set<UUID> added = new java.util.HashSet<>(stems.values());
+        if (playbackMediaId != null) {
+            added.add(playbackMediaId);
+        }
+        List<UUID> replacedMedia = new ArrayList<>();
+        for (Recording r : replaced) {
+            song.removeRecording(r.id());
+            song.recordings().stream().filter(o -> r.id().equals(o.derivedFrom())).forEach(Recording::forgetOrigin);
+            if (!added.contains(r.mediaId())) {
+                replacedMedia.add(r.mediaId());
+            }
+        }
+        songs.flush(); // the unique (song, kind, media) key: deletions first
+        String timingJson = null;
         if (source.timingJson() != null) {
             Timing timing = json.readValue(source.timingJson(), Timing.class);
-            // Kept as-is (same lyrics version): the separated track has exactly the same timeline.
-            recording.setTiming(json.writeValueAsString(
-                    new Timing(timing.lyricsVersion(), Source.PIPELINE, false, timing.cues())));
+            // Kept as-is (same lyrics version): a separated track has exactly the same timeline.
+            timingJson = json.writeValueAsString(new Timing(timing.lyricsVersion(), Source.PIPELINE, false, timing.cues()));
+        }
+        List<UUID> ids = new ArrayList<>();
+        if (playbackMediaId != null) {
+            Recording playback = song.addRecording(RecordingKind.PLAYBACK, playbackMediaId, Source.PIPELINE, null,
+                    sourceRecordingId);
+            playback.setTiming(timingJson);
+            ids.add(playback.id());
+        }
+        for (StemPart part : StemPart.values()) { // stable order
+            UUID media = stems.get(part);
+            if (media != null) {
+                Recording stem = song.addRecording(RecordingKind.STEM, media, Source.PIPELINE, part, sourceRecordingId);
+                stem.setTiming(timingJson);
+                ids.add(stem.id());
+            }
         }
         song.touch(clock.instant());
         songs.flush();
-        return recording.id();
+        replacedMedia.removeIf(m -> song.recordings().stream().anyMatch(r -> r.mediaId().equals(m)));
+        return new SeparatedTracks(ids, replacedMedia);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<StemPart> recordingPart(UUID songId, UUID recordingId) {
+        return songs.findById(songId).flatMap(s -> s.recordings().stream()
+                .filter(r -> r.id().equals(recordingId)).findFirst()).map(Recording::part);
     }
 
     @Override
@@ -178,9 +238,19 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
         }
         String timingJson = json.writeValueAsString(timing);
         target.setTiming(timingJson);
-        // Playbacks the pipeline made from this song have exactly the same timeline.
+        // Tracks the pipeline separated from this recording (and from those) have the same timeline;
+        // so do playbacks it made before tracks recorded their origin.
+        java.util.Set<UUID> sameTimeline = new java.util.HashSet<>(List.of(target.id()));
+        boolean grew = true;
+        while (grew) {
+            grew = song.recordings().stream()
+                    .filter(r -> r.source() == Source.PIPELINE && r.derivedFrom() != null
+                            && sameTimeline.contains(r.derivedFrom()))
+                    .map(Recording::id).toList().stream().map(sameTimeline::add).reduce(false, Boolean::logicalOr);
+        }
         song.recordings().stream()
-                .filter(r -> r != target && r.kind() == RecordingKind.PLAYBACK && r.source() == Source.PIPELINE)
+                .filter(r -> r != target && r.source() == Source.PIPELINE && (sameTimeline.contains(r.id())
+                        || (r.kind() == RecordingKind.PLAYBACK && r.derivedFrom() == null)))
                 .forEach(r -> r.setTiming(timingJson));
         song.markDraft(now);
         songs.flush();
@@ -259,7 +329,9 @@ class SongService implements MediaUsage, SongCatalog, SongPipeline {
             List<PlanSlide> slides = sequence.stream()
                     .map(s -> new PlanSlide(s.partLabel(), s.kind() == Lyrics.PartKind.INSTRUMENTAL, s.lines(), s.cue()))
                     .toList();
-            List<PlanRecording> recordings = song.recordings().stream().map(r -> {
+            // Separated tracks are for listening and rehearsal, not offered for presenting (yet).
+            List<PlanRecording> recordings = song.recordings().stream().filter(r -> r.kind() != RecordingKind.STEM)
+                    .map(r -> {
                 Timing timing = timing(r);
                 List<Long> cues = new ArrayList<>();
                 if (timing != null && java.util.Objects.equals(timing.lyricsVersion(), song.lyricsVersion())) {

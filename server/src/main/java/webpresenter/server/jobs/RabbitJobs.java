@@ -21,6 +21,8 @@ import tools.jackson.databind.json.JsonMapper;
  * RabbitMQ wiring. Messages are plain JSON (UTF-8):
  * <ul>
  *   <li>{@value #JOBS}: durable queue of {@link WorkerMessages.JobRequest} (persistent messages);</li>
+ *   <li>{@value #HEAVY_JOBS}: the same for jobs that need a lot of computation (separation,
+ *       recognition), so GPU workers can take them first and CPU workers only after a delay;</li>
  *   <li>{@value #EVENTS}: durable queue of {@link WorkerMessages.WorkerEvent} from the workers;</li>
  *   <li>{@value #CONTROL}: fanout exchange of {@link WorkerMessages.Control} (cancellation) to every worker.</li>
  * </ul>
@@ -29,12 +31,14 @@ import tools.jackson.databind.json.JsonMapper;
 class RabbitJobs {
 
     static final String JOBS = "webpresenter.jobs";
+    static final String HEAVY_JOBS = "webpresenter.jobs.heavy";
     static final String EVENTS = "webpresenter.job-events";
     static final String CONTROL = "webpresenter.job-control";
 
     @Bean
     Declarables jobTopology() {
-        return new Declarables(QueueBuilder.durable(JOBS).build(), QueueBuilder.durable(EVENTS).build(),
+        return new Declarables(QueueBuilder.durable(JOBS).build(), QueueBuilder.durable(HEAVY_JOBS).build(),
+                QueueBuilder.durable(EVENTS).build(),
                 new FanoutExchange(CONTROL, true, false));
     }
 
@@ -51,7 +55,9 @@ class RabbitJobs {
 
         @Override
         public void dispatch(WorkerMessages.JobRequest request) {
-            rabbit.send("", JOBS, message(request, MessageDeliveryMode.PERSISTENT));
+            Message message = message(request, MessageDeliveryMode.PERSISTENT);
+            message.getMessageProperties().setTimestamp(new java.util.Date()); // workers may wait before taking it
+            rabbit.send("", request.type().heavy() ? HEAVY_JOBS : JOBS, message);
         }
 
         @Override

@@ -69,6 +69,14 @@ class JobController {
         return jobs.separatePlayback(request.songId(), request.recordingId(), user.getName());
     }
 
+    /** Choir voices of the vocals track (or of a sung a cappella recording). */
+    @PostMapping("/separate-voices")
+    @PreAuthorize(CAN_MANAGE)
+    @ResponseStatus(HttpStatus.CREATED)
+    JobView separateVoices(@Valid @RequestBody SeparateRequest request, Authentication user) {
+        return jobs.separateVoices(request.songId(), request.recordingId(), user.getName());
+    }
+
     /** Lyrics (if the song has none) and slide times from a sung recording. */
     @PostMapping("/transcribe-lyrics")
     @PreAuthorize(CAN_MANAGE)

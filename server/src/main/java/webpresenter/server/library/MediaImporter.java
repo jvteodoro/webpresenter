@@ -12,4 +12,11 @@ public interface MediaImporter {
      * @throws RuntimeException if the file is not audio, video or an image (as an upload would be refused)
      */
     MediaFile importFile(Path file, String filename, String title, MediaPurpose purpose, String createdBy);
+
+    /**
+     * Removes media that nothing uses any more (a processing result replaced by a newer one).
+     *
+     * @return false when the media is still used somewhere (it is kept) or does not exist
+     */
+    boolean discardIfUnused(java.util.UUID id);
 }

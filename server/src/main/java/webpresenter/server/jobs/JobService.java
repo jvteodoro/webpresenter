@@ -28,6 +28,7 @@ import webpresenter.server.library.MediaPurpose;
 import webpresenter.server.songs.RecordingKind;
 import webpresenter.server.songs.SongCatalog;
 import webpresenter.server.songs.SongPipeline;
+import webpresenter.server.songs.StemPart;
 import webpresenter.server.storage.MediaStore;
 
 /** Creates jobs, sends them to the workers, follows their progress and registers their results. */
@@ -129,7 +130,35 @@ class JobService {
         params.put("songId", songId.toString());
         params.put("recordingId", recordingId.toString());
         params.put("mediaId", recording.mediaId().toString());
-        Job job = jobs.save(new Job(JobType.SEPARATE_PLAYBACK, "Playback sem voz · " + song.title(),
+        if (recording.kind() == RecordingKind.STEM) {
+            throw new InvalidJobException("choose the song's recording, not a separated track");
+        }
+        Job job = jobs.save(new Job(JobType.SEPARATE_PLAYBACK, "Separar faixas · " + song.title(),
+                json.writeValueAsString(params), user, clock.instant()));
+        enqueue(job);
+        return view(job);
+    }
+
+    /**
+     * Separates the choir voices of a recording: preferably the VOCALS track separated by Demucs
+     * (voices alone), or a sung recording that is a cappella.
+     */
+    @Transactional
+    JobView separateVoices(UUID songId, UUID recordingId, String user) {
+        var song = songs.find(songId).orElseThrow(() -> new NotFoundException("song " + songId + " not found"));
+        UUID media = pipeline.recordingMedia(songId, recordingId)
+                .orElseThrow(() -> new InvalidJobException("recording " + recordingId + " is not a recording of this song"));
+        StemPart part = pipeline.recordingPart(songId, recordingId).orElse(null);
+        boolean usable = part != null ? part == StemPart.VOCALS
+                : song.recording(recordingId).map(r -> r.kind() != RecordingKind.PLAYBACK).orElse(false);
+        if (!usable) {
+            throw new InvalidJobException("choose the vocals track (or a sung a cappella recording)");
+        }
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("songId", songId.toString());
+        params.put("recordingId", recordingId.toString());
+        params.put("mediaId", media.toString());
+        Job job = jobs.save(new Job(JobType.SEPARATE_VOICES, "Separar naipes · " + song.title(),
                 json.writeValueAsString(params), user, clock.instant()));
         enqueue(job);
         return view(job);
@@ -239,6 +268,10 @@ class JobService {
     }
 
     private void complete(Job job, WorkerMessages.WorkerEvent event) {
+        if (event.files() != null) {
+            completeMany(job, event.files());
+            return;
+        }
         String staging = stagingKey(job);
         Path temp = null;
         try {
@@ -248,26 +281,122 @@ class JobService {
             Map<String, Object> params = json.readValue(job.params(), MAP);
             Map<String, Object> result = switch (job.type()) {
                 case YOUTUBE_IMPORT -> registerImport(job, params, temp, filename, event.title());
-                case SEPARATE_PLAYBACK -> registerPlayback(job, params, temp, filename);
                 case TRANSCRIBE_LYRICS -> registerLyrics(params, temp);
+                case SEPARATE_PLAYBACK -> registerTracks(job, params, Map.of("playback", new Output(temp, filename)));
+                case SEPARATE_VOICES -> throw new IllegalStateException("the worker sent a single file");
             };
             job.done(json.writeValueAsString(result), "Concluído", clock.instant());
         } catch (RuntimeException | IOException e) {
             log.warn("could not register the result of job {}", job.id(), e);
             job.failed("Não foi possível registrar o resultado: " + e.getMessage(), clock.instant());
         } finally {
-            if (temp != null) {
-                try {
-                    Files.deleteIfExists(temp);
-                } catch (IOException ignored) {
-                    // temporary file
+            deleteQuietly(temp);
+            removeStaging(staging);
+        }
+    }
+
+    /** A result file downloaded from the staging area. */
+    record Output(Path file, String filename) {}
+
+    private void completeMany(Job job, Map<String, String> files) {
+        Map<String, Output> outputs = new LinkedHashMap<>();
+        try {
+            for (var file : files.entrySet()) {
+                if (!outputNames(job).contains(file.getKey())) {
+                    throw new IllegalStateException("unexpected result " + file.getKey());
                 }
+                String filename = file.getValue() == null || file.getValue().isBlank() ? file.getKey() : file.getValue();
+                Path temp = Files.createTempFile("webpresenter-job-", suffix(filename));
+                outputs.put(file.getKey(), new Output(temp, filename));
+                store.download(stagingKey(job, file.getKey()), temp);
             }
+            Map<String, Object> params = json.readValue(job.params(), MAP);
+            Map<String, Object> result = switch (job.type()) {
+                case SEPARATE_PLAYBACK, SEPARATE_VOICES -> registerTracks(job, params, outputs);
+                default -> throw new IllegalStateException("the worker sent several files for a " + job.type() + " job");
+            };
+            job.done(json.writeValueAsString(result), "Concluído", clock.instant());
+        } catch (RuntimeException | IOException e) {
+            log.warn("could not register the results of job {}", job.id(), e);
+            job.failed("Não foi possível registrar o resultado: " + e.getMessage(), clock.instant());
+        } finally {
+            outputs.values().forEach(o -> deleteQuietly(o.file()));
+            outputNames(job).forEach(name -> removeStaging(stagingKey(job, name)));
+        }
+    }
+
+    /** Output names of jobs with several result files (empty: a single result). */
+    static List<String> outputNames(Job job) {
+        return switch (job.type()) {
+            case SEPARATE_PLAYBACK -> List.of("playback", "vocals", "drums", "bass", "other");
+            case SEPARATE_VOICES -> List.of("lead", "soprano", "alto", "tenor", "bass_voice", "vocal_percussion");
+            default -> List.of();
+        };
+    }
+
+    private static final Map<String, String> TRACK_LABELS = Map.ofEntries(
+            Map.entry("playback", "playback gerado"), Map.entry("vocals", "voz"), Map.entry("drums", "bateria"),
+            Map.entry("bass", "baixo"), Map.entry("other", "outros instrumentos"), Map.entry("lead", "solista"),
+            Map.entry("soprano", "soprano"), Map.entry("alto", "contralto"), Map.entry("tenor", "tenor"),
+            Map.entry("bass_voice", "baixo, voz"), Map.entry("vocal_percussion", "percussão vocal"));
+
+    /** Separated tracks into the library and the song; replaced tracks' media are discarded. */
+    private Map<String, Object> registerTracks(Job job, Map<String, Object> params, Map<String, Output> outputs) {
+        UUID songId = UUID.fromString((String) params.get("songId"));
+        UUID recordingId = UUID.fromString((String) params.get("recordingId"));
+        String songTitle = songs.find(songId).map(SongCatalog.SongPlan::title)
+                .orElseThrow(() -> new IllegalStateException("a música foi removida"));
+        if (outputs.isEmpty()) {
+            throw new IllegalStateException("nenhuma faixa foi gerada");
+        }
+        UUID playback = null;
+        Map<StemPart, UUID> stems = new java.util.EnumMap<>(StemPart.class);
+        for (var output : outputs.entrySet()) {
+            MediaFile media = importer.importFile(output.getValue().file(), output.getValue().filename(),
+                    songTitle + " (" + TRACK_LABELS.getOrDefault(output.getKey(), output.getKey()) + ")",
+                    MediaPurpose.SONG_AUDIO, job.createdBy());
+            if (output.getKey().equals("playback")) {
+                playback = media.id();
+            } else {
+                stems.put(StemPart.valueOf(output.getKey().toUpperCase(java.util.Locale.ROOT)), media.id());
+            }
+        }
+        var tracks = pipeline.addSeparatedTracks(songId, recordingId, playback, stems);
+        int discarded = 0;
+        for (UUID old : tracks.replacedMedia()) {
             try {
-                store.delete(staging);
+                discarded += importer.discardIfUnused(old) ? 1 : 0;
             } catch (RuntimeException e) {
-                log.debug("could not remove staging object {}", staging, e);
+                log.warn("could not discard replaced media {}", old, e);
             }
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("songId", songId.toString());
+        result.put("recordingIds", tracks.recordingIds().stream().map(UUID::toString).toList());
+        result.put("tracks", List.copyOf(outputs.keySet()));
+        result.put("replaced", discarded);
+        if (playback != null) {
+            result.put("mediaId", playback.toString());
+            result.put("recordingId", tracks.recordingIds().getFirst().toString()); // the playback comes first
+        }
+        return result;
+    }
+
+    private static void deleteQuietly(Path file) {
+        if (file != null) {
+            try {
+                Files.deleteIfExists(file);
+            } catch (IOException ignored) {
+                // temporary file
+            }
+        }
+    }
+
+    private void removeStaging(String key) {
+        try {
+            store.delete(key);
+        } catch (RuntimeException e) {
+            log.debug("could not remove staging object {}", key, e);
         }
     }
 
@@ -288,17 +417,6 @@ class JobService {
             result.put("songId", pipeline.createFromRecording(title, media.id()).toString());
         }
         return result;
-    }
-
-    private Map<String, Object> registerPlayback(Job job, Map<String, Object> params, Path file, String filename) {
-        UUID songId = UUID.fromString((String) params.get("songId"));
-        UUID recordingId = UUID.fromString((String) params.get("recordingId"));
-        String songTitle = songs.find(songId).map(SongCatalog.SongPlan::title)
-                .orElseThrow(() -> new IllegalStateException("a música foi removida"));
-        MediaFile media = importer.importFile(file, filename, songTitle + " (playback gerado)", MediaPurpose.SONG_AUDIO,
-                job.createdBy());
-        UUID playback = pipeline.addGeneratedPlayback(songId, recordingId, media.id());
-        return Map.of("mediaId", media.id().toString(), "songId", songId.toString(), "recordingId", playback.toString());
     }
 
     /** The worker's JSON: {"mode", "lyrics"?, "cues": [{"slide", "startMs"}], "confidence"?}. */
@@ -330,11 +448,18 @@ class JobService {
     private void enqueue(Job job) {
         Map<String, Object> params = json.readValue(job.params(), MAP);
         String inputUrl = null;
-        if (job.type() == JobType.SEPARATE_PLAYBACK || job.type() == JobType.TRANSCRIBE_LYRICS) {
+        if (job.type() != JobType.YOUTUBE_IMPORT) {
             inputUrl = catalog.workerDownloadUrl(UUID.fromString((String) params.get("mediaId"))).url().toString();
         }
+        Map<String, String> outputs = null;
+        if (!outputNames(job).isEmpty()) {
+            outputs = new LinkedHashMap<>();
+            for (String name : outputNames(job)) {
+                outputs.put(name, store.presignedWorkerUpload(stagingKey(job, name), LINK_VALIDITY).url().toString());
+            }
+        }
         var request = new WorkerMessages.JobRequest(job.id(), job.attempt(), job.type(), params, inputUrl,
-                store.presignedWorkerUpload(stagingKey(job), LINK_VALIDITY).url().toString());
+                store.presignedWorkerUpload(stagingKey(job), LINK_VALIDITY).url().toString(), outputs);
         UUID id = job.id();
         int attempt = job.attempt();
         afterCommit(() -> {
@@ -388,6 +513,10 @@ class JobService {
 
     static String stagingKey(Job job) {
         return "jobs/" + job.id() + "/" + job.attempt() + "/result";
+    }
+
+    static String stagingKey(Job job, String output) {
+        return "jobs/" + job.id() + "/" + job.attempt() + "/" + output;
     }
 
     private Job find(UUID id) {

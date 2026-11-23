@@ -5,5 +5,7 @@ public enum RecordingKind {
     SUNG,
     /** Instrumental / backing track. */
     PLAYBACK,
-    OTHER
+    OTHER,
+    /** A separated track (one instrument or one voice) of another recording; see {@link StemPart}. */
+    STEM
 }

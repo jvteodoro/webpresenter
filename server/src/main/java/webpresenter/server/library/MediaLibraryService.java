@@ -170,6 +170,17 @@ class MediaLibraryService implements MediaCatalog, MediaImporter {
     }
 
     @Override
+    @Transactional
+    public boolean discardIfUnused(UUID id) {
+        if (repository.findById(id).isEmpty()
+                || usages.orderedStream().anyMatch(u -> !u.usagesOf(id).isEmpty())) {
+            return false;
+        }
+        delete(id);
+        return true;
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Optional<MediaFile> find(UUID id) {
         return repository.findById(id).map(a -> new MediaFile(a.id(), a.title(), a.kind(), a.contentType(),

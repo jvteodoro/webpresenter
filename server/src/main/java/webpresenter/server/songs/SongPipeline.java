@@ -14,6 +14,24 @@ public interface SongPipeline {
     UUID addGeneratedPlayback(UUID songId, UUID sourceRecordingId, UUID mediaId);
 
     /**
+     * Registers the tracks separated from a recording (same timeline: its timing is copied, marked
+     * {@code PIPELINE} and not reviewed): a PLAYBACK (everything but the vocals) when given, and a
+     * STEM recording per part. Tracks the pipeline separated earlier from the same recording, for the
+     * same parts (or an earlier playback), are replaced; their media are returned so the caller can
+     * discard them.
+     *
+     * @param playbackMediaId the generated playback, or null
+     */
+    SeparatedTracks addSeparatedTracks(UUID songId, UUID sourceRecordingId, UUID playbackMediaId,
+            java.util.Map<StemPart, UUID> stems);
+
+    /** @param replacedMedia media of the tracks that were replaced (no longer used by this song) */
+    record SeparatedTracks(java.util.List<UUID> recordingIds, java.util.List<UUID> replacedMedia) {}
+
+    /** The part a STEM recording holds (null for other kinds), if the song and recording exist. */
+    java.util.Optional<StemPart> recordingPart(UUID songId, UUID recordingId);
+
+    /**
      * Creates a draft song from downloaded audio: the title, an instrumental placeholder for the
      * lyrics (to be written or transcribed later) and the audio as its SUNG recording.
      *

@@ -6,6 +6,10 @@ Environment:
   RABBITMQ_URL   amqp://user:password@host:5672/%2F (default: local development broker)
   WORK_DIR       scratch directory (default: system temporary directory)
   DEMUCS_MODEL   Demucs model (default htdemucs); DEMUCS_DEVICE cpu|cuda (default: cuda if available)
+  HEAVY_JOBS_AFTER  seconds a heavy job (separation, recognition) must have waited before this worker
+                 takes it (default 0). CPU workers next to a GPU worker use a delay, so the GPU worker
+                 takes them first and the CPU one only when the GPU worker is away.
+  JOB_KINDS      "all" (default), "light" or "heavy"
 """
 from __future__ import annotations
 
@@ -22,16 +26,18 @@ from pathlib import Path
 import pika
 
 from . import jobs
-from .messages import CONTROL, EVENTS, JOBS, JobRequest, event
+from .messages import CONTROL, EVENTS, HEAVY_JOBS, JOBS, JobRequest, event
 
 log = logging.getLogger("webpresenter.worker")
 HEARTBEAT_SECONDS = 30
 
 
 class Worker:
-    def __init__(self, url: str, workdir: Path):
+    def __init__(self, url: str, workdir: Path, heavy_after: float = 0, kinds: str = "all"):
         self.url = url
         self.workdir = workdir
+        self.heavy_after = heavy_after
+        self.queues = {"light": [JOBS], "heavy": [HEAVY_JOBS]}.get(kinds, [HEAVY_JOBS, JOBS])
         self.stopping = False
 
     def run(self) -> None:
@@ -48,6 +54,7 @@ class Worker:
         connection = pika.BlockingConnection(pika.URLParameters(self.url))
         channel = connection.channel()
         channel.queue_declare(JOBS, durable=True)
+        channel.queue_declare(HEAVY_JOBS, durable=True)
         channel.queue_declare(EVENTS, durable=True)
         channel.exchange_declare(CONTROL, exchange_type="fanout", durable=True)
         control = channel.queue_declare("", exclusive=True, auto_delete=True).method.queue
@@ -70,9 +77,21 @@ class Worker:
             channel.basic_publish("", EVENTS, json.dumps(payload).encode(),
                                   pika.BasicProperties(content_type="application/json", delivery_mode=2))
 
-        log.info("worker ready, waiting for jobs")
+        log.info("worker ready, waiting for jobs (%s%s)", ", ".join(self.queues),
+                 f"; heavy jobs after {self.heavy_after:.0f} s" if self.heavy_after and HEAVY_JOBS in self.queues else "")
         while not self.stopping:
-            method, _, body = channel.basic_get(JOBS, auto_ack=False)
+            method = body = None
+            for queue in self.queues:
+                method, properties, body = channel.basic_get(queue, auto_ack=False)
+                if method is None:
+                    continue
+                waited = time.time() - (properties.timestamp or 0)
+                if queue == HEAVY_JOBS and waited < self.heavy_after:
+                    # Left for a faster (GPU) worker for now; taken later if none does.
+                    channel.basic_nack(method.delivery_tag, requeue=True)
+                    method = None
+                    continue
+                break
             if method is None:
                 connection.process_data_events(time_limit=2)
                 continue
@@ -108,7 +127,13 @@ class Worker:
                     raise jobs.JobFailed(f"Tipo de trabalho desconhecido: {job.type}")
                 result = handler(job, workdir, jobs.Reporter(progress, cancelled))
                 progress(95, "Enviando o resultado")
-                jobs.upload(job.output_url, result.path)
+                if result.files is not None:
+                    for name, path in result.files.items():
+                        if name not in job.outputs:
+                            raise jobs.JobFailed(f"Resultado inesperado: {name}")
+                        jobs.upload(job.outputs[name], path)
+                else:
+                    jobs.upload(job.output_url, result.path)
                 outcome["done"] = result
             except jobs.Cancelled:
                 outcome["cancelled"] = True
@@ -134,7 +159,8 @@ class Worker:
                     last_sent = time.monotonic()
             if "done" in outcome:
                 result = outcome["done"]
-                publish(event(job, "DONE", 100, "Concluído", result.filename, result.title))
+                files = None if result.files is None else {n: p.name for n, p in result.files.items()}
+                publish(event(job, "DONE", 100, "Concluído", result.filename, result.title, files))
                 log.info("job %s done", job.job_id)
             elif "failed" in outcome:
                 publish(event(job, "FAILED", None, outcome["failed"]))
@@ -152,7 +178,8 @@ def main() -> None:
     url = os.environ.get("RABBITMQ_URL", "amqp://webpresenter:webpresenter@localhost:5672/%2F")
     workdir = Path(os.environ.get("WORK_DIR", tempfile.gettempdir()))
     workdir.mkdir(parents=True, exist_ok=True)
-    worker = Worker(url, workdir)
+    worker = Worker(url, workdir, float(os.environ.get("HEAVY_JOBS_AFTER", "0")),
+                    os.environ.get("JOB_KINDS", "all"))
 
     def stop(*_):
         worker.stopping = True
