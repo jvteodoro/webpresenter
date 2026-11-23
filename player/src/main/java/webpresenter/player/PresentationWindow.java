@@ -64,6 +64,7 @@ final class PresentationWindow {
     private final Label songLines = label(FontWeight.BOLD, Color.WHITE);
     private final VBox songText = new VBox(18);
     private final ImageView slideBackground = fitted(new ImageView());
+    private final VBox slideText = new VBox(28);
     /** Text style of slides and lyrics (slide style of the item): colour and size in percent. */
     private Color textColor = Color.WHITE;
     private double textScale = 1;
@@ -122,7 +123,7 @@ final class PresentationWindow {
         restImage.setOpacity(0);
         itemImage.setOpacity(0);
 
-        VBox slideText = new VBox(28, slideTitle, slideBody);
+        slideText.getChildren().addAll(slideTitle, slideBody);
         slideText.setAlignment(Pos.CENTER);
         // Optional background image (slide style), covering the output and darkened for contrast.
         javafx.scene.layout.Region slideShade = new javafx.scene.layout.Region();
@@ -195,8 +196,9 @@ final class PresentationWindow {
         root.heightProperty().addListener((obs, o, h) -> scaleText(h.doubleValue()));
         root.widthProperty().addListener((obs, o, w) -> {
             Insets margins = new Insets(0, w.doubleValue() * 0.08, 0, w.doubleValue() * 0.08);
-            slide.setPadding(margins);
-            song.setPadding(margins);
+            // Margins on the text only: backgrounds and their shade cover the whole output.
+            slideText.setPadding(margins);
+            songText.setPadding(margins);
         });
 
         itemVolume.addListener((obs, o, v) -> applyItemVolume());
