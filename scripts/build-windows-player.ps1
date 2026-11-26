@@ -107,8 +107,14 @@ if (-not $curl) { throw 'curl.exe is required to download the libmpv archives.' 
 
 Write-Host 'Finding the latest x64 libmpv archive links...'
 $releasePage = (Invoke-WebRequest -Uri $mpvReleases -Headers @{ 'User-Agent' = 'WebPresenter-build-script' }).Content
-$devMatch = [regex]::Match($releasePage, 'href="(?<url>/shinchiro/mpv-winbuild-cmake/releases/download/[^" ]+/mpv-dev-x86_64-\d{8}-git-[^" ]+\.7z)"')
-$appMatch = [regex]::Match($releasePage, 'href="(?<url>/shinchiro/mpv-winbuild-cmake/releases/download/[^" ]+/mpv-x86_64-\d{8}-git-[^" ]+\.7z)"')
+$tagMatch = [regex]::Match($releasePage, '/shinchiro/mpv-winbuild-cmake/releases/tag/(?<tag>[^"/?#]+)')
+if (-not $tagMatch.Success) {
+    throw 'Could not determine the latest mpv release tag from GitHub.'
+}
+$assetsUrl = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/expanded_assets/$($tagMatch.Groups['tag'].Value)"
+$assetsPage = (Invoke-WebRequest -Uri $assetsUrl -Headers @{ 'User-Agent' = 'WebPresenter-build-script' }).Content
+$devMatch = [regex]::Match($assetsPage, 'href="(?<url>/shinchiro/mpv-winbuild-cmake/releases/download/[^" ]+/mpv-dev-x86_64-[^" ]+\.7z)"')
+$appMatch = [regex]::Match($assetsPage, 'href="(?<url>/shinchiro/mpv-winbuild-cmake/releases/download/[^" ]+/mpv-x86_64-[^" ]+\.7z)"')
 if (-not $devMatch.Success -or -not $appMatch.Success) {
     throw 'Could not find x64 libmpv archives on the latest GitHub release page.'
 }
