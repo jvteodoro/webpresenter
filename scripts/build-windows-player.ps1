@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $runtimeDir = Join-Path $repoRoot 'player\build\mpv-runtime'
-$mpvApi = 'https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest'
+$mpvBase = 'https://github.com/shinchiro/mpv-winbuild-cmake/releases/latest/download'
 
 function Invoke-WingetInstall([string] $Id) {
     Write-Host "Installing $Id..."
@@ -102,21 +102,15 @@ if (-not (Get-Command candle.exe -ErrorAction SilentlyContinue) -or
 $sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
 if (-not $sevenZip) { throw '7z.exe was not found. Reopen PowerShell or install 7-Zip.' }
 
-Write-Host 'Finding the latest x64 libmpv runtime...'
-$release = Invoke-RestMethod -Uri $mpvApi -Headers @{ 'User-Agent' = 'WebPresenter-build-script' }
-$devAsset = $release.assets | Where-Object { $_.name -match '^mpv-dev-x86_64-.*\.7z$' } | Select-Object -First 1
-$appAsset = $release.assets | Where-Object { $_.name -match '^mpv-x86_64-\d{8}-git-.*\.7z$' } | Select-Object -First 1
-if (-not $devAsset -or -not $appAsset) {
-    throw "Could not find matching x64 mpv development/runtime archives in release $($release.tag_name)."
-}
+Write-Host 'Downloading the latest x64 libmpv runtime...'
 
 New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
 $archiveDir = Join-Path $runtimeDir 'archives'
 New-Item -ItemType Directory -Force -Path $archiveDir | Out-Null
-$devArchive = Join-Path $archiveDir $devAsset.name
-$appArchive = Join-Path $archiveDir $appAsset.name
-Invoke-WebRequest -Uri $devAsset.browser_download_url -OutFile $devArchive
-Invoke-WebRequest -Uri $appAsset.browser_download_url -OutFile $appArchive
+$devArchive = Join-Path $archiveDir 'mpv-dev-x86_64.7z'
+$appArchive = Join-Path $archiveDir 'mpv-x86_64.7z'
+Invoke-WebRequest -Uri "$mpvBase/mpv-dev-x86_64.7z" -OutFile $devArchive
+Invoke-WebRequest -Uri "$mpvBase/mpv-x86_64.7z" -OutFile $appArchive
 
 # The dev archive supplies libmpv-2.dll; the full mpv archive supplies its runtime DLL dependencies.
 & $sevenZip.Source x $devArchive "-o$runtimeDir" -y | Out-Null
