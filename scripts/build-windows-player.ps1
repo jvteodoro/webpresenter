@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $runtimeDir = Join-Path $repoRoot 'player\build\mpv-runtime'
-$mpvBase = 'https://github.com/shinchiro/mpv-winbuild-cmake/releases/latest/download'
+$mpvReleases = 'https://github.com/shinchiro/mpv-winbuild-cmake/releases/latest'
 
 function Invoke-WingetInstall([string] $Id) {
     Write-Host "Installing $Id..."
@@ -102,15 +102,26 @@ if (-not (Get-Command candle.exe -ErrorAction SilentlyContinue) -or
 $sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
 if (-not $sevenZip) { throw '7z.exe was not found. Reopen PowerShell or install 7-Zip.' }
 
-Write-Host 'Downloading the latest x64 libmpv runtime...'
+$curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+if (-not $curl) { throw 'curl.exe is required to download the libmpv archives.' }
+
+Write-Host 'Finding the latest x64 libmpv archive links...'
+$releasePage = (Invoke-WebRequest -Uri $mpvReleases -Headers @{ 'User-Agent' = 'WebPresenter-build-script' }).Content
+$devMatch = [regex]::Match($releasePage, 'href="(?<url>/shinchiro/mpv-winbuild-cmake/releases/download/[^" ]+/mpv-dev-x86_64-\d{8}-git-[^" ]+\.7z)"')
+$appMatch = [regex]::Match($releasePage, 'href="(?<url>/shinchiro/mpv-winbuild-cmake/releases/download/[^" ]+/mpv-x86_64-\d{8}-git-[^" ]+\.7z)"')
+if (-not $devMatch.Success -or -not $appMatch.Success) {
+    throw 'Could not find x64 libmpv archives on the latest GitHub release page.'
+}
 
 New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
 $archiveDir = Join-Path $runtimeDir 'archives'
 New-Item -ItemType Directory -Force -Path $archiveDir | Out-Null
-$devArchive = Join-Path $archiveDir 'mpv-dev-x86_64.7z'
-$appArchive = Join-Path $archiveDir 'mpv-x86_64.7z'
-Invoke-WebRequest -Uri "$mpvBase/mpv-dev-x86_64.7z" -OutFile $devArchive
-Invoke-WebRequest -Uri "$mpvBase/mpv-x86_64.7z" -OutFile $appArchive
+$devArchive = Join-Path $archiveDir ([IO.Path]::GetFileName($devMatch.Groups['url'].Value))
+$appArchive = Join-Path $archiveDir ([IO.Path]::GetFileName($appMatch.Groups['url'].Value))
+& $curl.Source --fail --location --retry 5 --retry-all-errors --connect-timeout 30 --output $devArchive ("https://github.com" + $devMatch.Groups['url'].Value)
+if ($LASTEXITCODE -ne 0) { throw "Could not download the libmpv development archive (curl exit $LASTEXITCODE)." }
+& $curl.Source --fail --location --retry 5 --retry-all-errors --connect-timeout 30 --output $appArchive ("https://github.com" + $appMatch.Groups['url'].Value)
+if ($LASTEXITCODE -ne 0) { throw "Could not download the libmpv runtime archive (curl exit $LASTEXITCODE)." }
 
 # The dev archive supplies libmpv-2.dll; the full mpv archive supplies its runtime DLL dependencies.
 & $sevenZip.Source x $devArchive "-o$runtimeDir" -y | Out-Null
