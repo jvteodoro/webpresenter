@@ -81,6 +81,9 @@
               <button mat-stroked-button (click)="transcribe(r)">
                 <mat-icon>subtitles</mat-icon> {{ hasLyrics() ? 'Sincronizar letra com o áudio' : 'Gerar letra e tempos' }}
               </button>
+              <button mat-stroked-button (click)="extractFromVideo(r)">
+                <mat-icon>ondemand_video</mat-icon> Ler a letra de um vídeo
+              </button>
               @if (hasLyrics() && s.status === 'DRAFT') {
                 <button mat-button (click)="transcribeAgain(r)">Gerar a letra de novo</button>
               }

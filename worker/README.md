@@ -15,7 +15,9 @@ uv pip install --python .venv/bin/python -e ".[separation,lyrics]"
 ```
 
 Requirements on the host: `ffmpeg`, and a JavaScript runtime for YouTube: `deno` (preferred), or a
-recent `node` (yt-dlp rejects Node 20) or `bun`. The image ships Deno.
+recent `node` (yt-dlp rejects Node 20) or `bun`. The image ships Deno. Lyrics read from a video's
+on-screen text need `tesseract` with its Portuguese data (`tesseract-ocr` and `tesseract-ocr-por` on
+Debian/Ubuntu; the image installs both).
 Demucs downloads its model (~80 MB) on first use into `TORCH_HOME` (default `~/.cache/torch`).
 It runs on CPU (several minutes per song) or on an NVIDIA GPU when PyTorch has CUDA.
 
@@ -27,6 +29,9 @@ It runs on CPU (several minutes per song) or on an NVIDIA GPU when PyTorch has C
 | `DEMUCS_DEVICE` | `cuda` if available | `cpu` or `cuda` |
 | `WHISPER_MODEL` | `medium` | lyrics recognition (`small` is faster, `large-v3` better and slower) |
 | `LYRICS_SEPARATE` | `1` | isolate the vocals with Demucs before recognizing (`0` skips it) |
+| `VIDEO_TEXT_FPS` | `2` | video lyrics: frames read per second (a line on screen is timed by them) |
+| `VIDEO_TEXT_WIDTH` | `1280` | video lyrics: width frames are read at |
+| `TESSERACT_LANG` | `por` | video lyrics: Tesseract language data |
 | `DEMUCS_SEGMENT` | model's | seconds per Demucs chunk (less GPU memory) |
 | `TRACK_BITRATE` | `160k` | AAC bitrate of separated tracks from lossy sources (lossless sources give FLAC) |
 | `JOB_KINDS` | `all` | `light` (imports) or `heavy` (separation, recognition) only |

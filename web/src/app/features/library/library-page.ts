@@ -43,6 +43,8 @@ export class LibraryPage {
     { path: 'avulsas', label: 'Músicas avulsas', icon: 'music_note' },
     { path: 'fundos', label: 'Fundos musicais', icon: 'graphic_eq' },
     { path: 'efeitos', label: 'Efeitos sonoros', icon: 'notifications_active' },
+    { path: 'diversos', label: 'Diversos', icon: 'movie' },
+    { path: 'mensagens', label: 'Mensagens musicais', icon: 'mic' },
     { path: 'midia', label: 'Mídia', icon: 'perm_media' },
   ];
 }

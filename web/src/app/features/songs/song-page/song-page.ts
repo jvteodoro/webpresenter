@@ -21,6 +21,8 @@ import { Lyrics, RECORDING_LABELS, Recording, SongDetail, inputOf } from '../../
 import { SongsApi } from '../../../core/songs/songs-api';
 import { DurationPipe } from '../../../shared/pipes/duration.pipe';
 import { LyricsEditorData, LyricsEditorDialog } from '../lyrics-editor-dialog/lyrics-editor-dialog';
+import { VideoPickerDialog } from '../video-picker-dialog';
+import { MediaAsset } from '../../../core/media/media';
 import { TrackMixer, trackGroups } from '../track-mixer/track-mixer';
 
 /**
@@ -58,7 +60,7 @@ export class SongPage {
   protected readonly songJobs = computed<Job[]>(() => {
     const latest = new Map<string, Job>();
     for (const j of this.jobs.jobs()) {
-      if ((j.type === 'SEPARATE_PLAYBACK' || j.type === 'TRANSCRIBE_LYRICS' || j.type === 'SEPARATE_VOICES')
+      if ((j.type === 'SEPARATE_PLAYBACK' || j.type === 'TRANSCRIBE_LYRICS' || j.type === 'SEPARATE_VOICES' || j.type === 'VIDEO_LYRICS')
           && j.params['songId'] === this.id()
           && !latest.has(j.type)) {
         latest.set(j.type, j);
@@ -75,7 +77,9 @@ export class SongPage {
   });
   /** While the track mixer plays: the recording its tracks came from and the position. */
   protected readonly mixer = signal<{ sourceId: string; positionMs: number } | null>(null);
-  protected readonly transcribing = computed(() => this.songJobs().some((j) => j.type === 'TRANSCRIBE_LYRICS' && isActive(j)));
+  /** Lyrics are being made, from the recording or from a video. */
+  protected readonly transcribing = computed(() =>
+    this.songJobs().some((j) => (j.type === 'TRANSCRIBE_LYRICS' || j.type === 'VIDEO_LYRICS') && isActive(j)));
   /** The song has real lyrics (not only the instrumental placeholder of a download). */
   protected readonly hasLyrics = computed(() => (this.song()?.slideSequence ?? []).some((s) => s.lines.length > 0));
   /** Generations seen in progress on this page; when one of them is done the song is reloaded. */
@@ -265,6 +269,24 @@ export class SongPage {
     });
   }
 
+  /** Reads the lyrics and slide times from the on-screen text of a video chosen from the library. */
+  protected extractFromVideo(recording: Recording): void {
+    this.dialog
+      .open<VideoPickerDialog, void, MediaAsset>(VideoPickerDialog, { width: '34rem', maxWidth: '94vw' })
+      .afterClosed()
+      .pipe(filter((video): video is MediaAsset => !!video))
+      .subscribe((video) => {
+        this.jobsApi.extractLyricsFromVideo(this.id(), recording.id, video.id, false).subscribe({
+          next: (job) => {
+            this.jobs.apply(job);
+            this.snackBar.open('Leitura da letra do vídeo na fila. Isso leva alguns minutos.', 'OK', { duration: 5000 });
+          },
+          error: (e: HttpErrorResponse) =>
+            this.snackBar.open(e.error?.detail ?? `Não foi possível ler o vídeo (${e.status}).`, 'OK', { duration: 5000 }),
+        });
+      });
+  }
+
   protected onMixerPosition(sourceId: string, positionMs: number | null): void {
     this.mixer.set(positionMs === null ? null : { sourceId, positionMs });
     if (positionMs !== null) {
@@ -289,7 +311,9 @@ export class SongPage {
   }
 
   protected jobLabel(job: Job): string {
-    return job.type === 'SEPARATE_PLAYBACK' ? 'faixas separadas' : job.type === 'SEPARATE_VOICES' ? 'naipes' : 'letra e tempos';
+    return job.type === 'SEPARATE_PLAYBACK' ? 'faixas separadas'
+      : job.type === 'SEPARATE_VOICES' ? 'naipes'
+      : job.type === 'VIDEO_LYRICS' ? 'letra pelo vídeo' : 'letra e tempos';
   }
 
   private load(id: string): void {

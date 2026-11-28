@@ -27,6 +27,11 @@ export class JobsApi {
     return this.http.post<Job>(`${this.baseUrl}/transcribe-lyrics`, { songId, recordingId, fresh });
   }
 
+  /** Lyrics and slide times read from the on-screen text of a video (the recording is the one the video follows). */
+  extractLyricsFromVideo(songId: string, recordingId: string, mediaId: string, fresh = false): Observable<Job> {
+    return this.http.post<Job>(`${this.baseUrl}/extract-lyrics-from-video`, { songId, recordingId, mediaId, fresh });
+  }
+
   cancel(id: string): Observable<Job> {
     return this.http.post<Job>(`${this.baseUrl}/${id}/cancel`, {});
   }

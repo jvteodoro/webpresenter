@@ -4,6 +4,9 @@
     @if (importTarget()) {
       <div class="import">
         <button mat-stroked-button type="button" (click)="openImport()"><mat-icon>download</mat-icon> Importar do YouTube</button>
+        @if (videoSources()) {
+          <button mat-stroked-button type="button" (click)="openVideoSources()"><mat-icon>sync</mat-icon> Vídeos recorrentes</button>
+        }
         @for (job of importing(); track job.id) {
           <span class="importing" role="status">
             <mat-icon>hourglass_top</mat-icon>

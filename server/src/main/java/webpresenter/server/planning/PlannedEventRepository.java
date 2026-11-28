@@ -13,6 +13,9 @@ interface PlannedEventRepository extends JpaRepository<PlannedEvent, UUID> {
 
     Optional<PlannedEvent> findByCurrentTrue();
 
+    @Query("select e.startsAt from PlannedEvent e where e.startsAt >= :from and e.startsAt < :to order by e.startsAt")
+    List<java.time.Instant> findStartsBetween(java.time.Instant from, java.time.Instant to);
+
     Optional<PlannedEvent> findByTemplateIdAndTemplateDate(UUID templateId, java.time.LocalDate date);
 
     @Query("select distinct i.event from EventItem i where i.mediaId = :mediaId")

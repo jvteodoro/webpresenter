@@ -29,7 +29,7 @@ import { ConfirmDialog, ConfirmDialogData } from '../../../shared/dialogs/confir
 import { DurationPipe } from '../../../shared/pipes/duration.pipe';
 import { FileSizePipe } from '../../../shared/pipes/file-size.pipe';
 import { EventDialog, EventDialogData } from '../dialogs/event-dialog';
-import { MediaPickerDialog } from '../dialogs/media-picker-dialog';
+import { MediaPickerData, MediaPickerDialog } from '../dialogs/media-picker-dialog';
 import { SlideDialog } from '../dialogs/slide-dialog';
 import { SongChoice, SongPickerDialog } from '../dialogs/song-picker-dialog';
 
@@ -193,7 +193,7 @@ export class EventEditorPage {
   protected addMedia(): void {
     const id = this.id();
     this.dialog
-      .open<MediaPickerDialog, void, string[]>(MediaPickerDialog)
+      .open<MediaPickerDialog, MediaPickerData, string[]>(MediaPickerDialog, { data: { purposes: ['GENERAL', 'MUSICAL_MESSAGE'] } })
       .afterClosed()
       .pipe(filter((ids): ids is string[] => !!ids && ids.length > 0))
       .subscribe((ids) =>

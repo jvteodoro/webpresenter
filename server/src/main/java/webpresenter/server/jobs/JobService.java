@@ -7,9 +7,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +44,7 @@ class JobService {
     static final Duration STALE_AFTER = Duration.ofMinutes(15);
     private static final TypeReference<Map<String, Object>> MAP = new TypeReference<>() {};
 
-    enum ImportTarget { MEDIA, BACKGROUND_MUSIC, SOUND_EFFECT, SONG }
+    enum ImportTarget { MEDIA, BACKGROUND_MUSIC, SOUND_EFFECT, SONG, MISC, MUSICAL_MESSAGE }
 
     enum ImportFormat { AUDIO, VIDEO }
 
@@ -89,10 +91,25 @@ class JobService {
         return view(find(id));
     }
 
+    @Transactional(readOnly = true)
+    Optional<JobView> lookup(UUID id) {
+        return jobs.findById(id).map(this::view);
+    }
+
     // ------------------------------------------------------------------ commands
 
     @Transactional
     JobView importFromUrl(String url, ImportTarget target, ImportFormat format, String title, String user) {
+        return importFromUrl(url, target, format, title, null, user);
+    }
+
+    /**
+     * @param matchDate for a channel: the worker downloads the video of this day (found by title or upload
+     *     date); null when the URL is the video itself
+     */
+    @Transactional
+    JobView importFromUrl(String url, ImportTarget target, ImportFormat format, String title, LocalDate matchDate,
+            String user) {
         URI uri;
         try {
             uri = URI.create(url == null ? "" : url.strip());
@@ -111,9 +128,46 @@ class JobService {
         params.put("format", format.name());
         String cleanTitle = title == null || title.isBlank() ? null : title.strip();
         params.put("title", cleanTitle);
+        if (matchDate != null) {
+            params.put("matchDate", matchDate.toString());
+        }
         String display = (cleanTitle != null ? cleanTitle : uri.toString());
         Job job = jobs.save(new Job(JobType.YOUTUBE_IMPORT, "Importar · " + display, json.writeValueAsString(params),
                 user, clock.instant()));
+        enqueue(job);
+        return view(job);
+    }
+
+    /**
+     * Lyrics and slide times read from the on-screen text of a video (the song's own lyrics when it has
+     * slides, aligned to them; otherwise transcribed from the text). The video's timeline must be the
+     * recording's: the recording is the performance the video shows.
+     */
+    @Transactional
+    JobView extractLyricsFromVideo(UUID songId, UUID recordingId, UUID mediaId, boolean fresh, String user) {
+        var song = songs.find(songId).orElseThrow(() -> new NotFoundException("song " + songId + " not found"));
+        var recording = song.recording(recordingId)
+                .orElseThrow(() -> new InvalidJobException("recording " + recordingId + " is not a recording of this song"));
+        if (recording.kind() == RecordingKind.PLAYBACK) {
+            throw new InvalidJobException("choose the recording the video follows (sung)");
+        }
+        var video = catalog.find(mediaId).orElseThrow(() -> new InvalidJobException("video " + mediaId + " not found"));
+        if (video.kind() != webpresenter.server.library.MediaKind.VIDEO) {
+            throw new InvalidJobException("choose a video");
+        }
+        List<String> slides = fresh ? List.of() : pipeline.slideTexts(songId);
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("songId", songId.toString());
+        params.put("recordingId", recordingId.toString());
+        params.put("mediaId", mediaId.toString());
+        params.put("language", "pt");
+        params.put("title", song.title());
+        if (!slides.isEmpty()) {
+            params.put("slides", slides);
+        }
+        Job job = jobs.save(new Job(JobType.VIDEO_LYRICS,
+                (slides.isEmpty() ? "Letra do vídeo · " : "Tempos da letra pelo vídeo · ") + song.title(),
+                json.writeValueAsString(params), user, clock.instant()));
         enqueue(job);
         return view(job);
     }
@@ -281,7 +335,7 @@ class JobService {
             Map<String, Object> params = json.readValue(job.params(), MAP);
             Map<String, Object> result = switch (job.type()) {
                 case YOUTUBE_IMPORT -> registerImport(job, params, temp, filename, event.title());
-                case TRANSCRIBE_LYRICS -> registerLyrics(params, temp);
+                case TRANSCRIBE_LYRICS, VIDEO_LYRICS -> registerLyrics(params, temp);
                 case SEPARATE_PLAYBACK -> registerTracks(job, params, Map.of("playback", new Output(temp, filename)));
                 case SEPARATE_VOICES -> throw new IllegalStateException("the worker sent a single file");
             };
@@ -409,6 +463,8 @@ class JobService {
             case BACKGROUND_MUSIC -> MediaPurpose.BACKGROUND_MUSIC;
             case SOUND_EFFECT -> MediaPurpose.SOUND_EFFECT;
             case SONG -> MediaPurpose.SONG_AUDIO;
+            case MISC -> MediaPurpose.MISC;
+            case MUSICAL_MESSAGE -> MediaPurpose.MUSICAL_MESSAGE;
         };
         MediaFile media = importer.importFile(file, filename, title, purpose, job.createdBy());
         Map<String, Object> result = new LinkedHashMap<>();

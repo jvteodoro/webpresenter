@@ -102,6 +102,33 @@ export const routes: Routes = [
         },
       },
       {
+        path: 'diversos',
+        title: 'Diversos · webpresenter',
+        loadComponent: () => import('./features/library/media-section/media-section').then((m) => m.MediaSection),
+        data: {
+          purpose: 'MISC',
+          accept: 'video/*,audio/*,image/*',
+          hint: 'Vídeos para os eventos: baixe do YouTube ou ligue um canal recorrente',
+          emptyText: 'Nenhum vídeo diverso ainda.',
+          kindFilter: true,
+          importTarget: 'MISC',
+          videoSources: true,
+        },
+      },
+      {
+        path: 'mensagens',
+        title: 'Mensagens musicais · webpresenter',
+        loadComponent: () => import('./features/library/media-section/media-section').then((m) => m.MediaSection),
+        data: {
+          purpose: 'MUSICAL_MESSAGE',
+          accept: 'video/*,audio/*',
+          hint: 'Vídeos e áudios dos cantores, como foram enviados (sem conversão): arraste para cá',
+          emptyText: 'Nenhuma mensagem musical ainda.',
+          kindFilter: true,
+          importTarget: 'MUSICAL_MESSAGE',
+        },
+      },
+      {
         path: 'midia',
         title: 'Mídia · webpresenter',
         loadComponent: () => import('./features/library/media-section/media-section').then((m) => m.MediaSection),

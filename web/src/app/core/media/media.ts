@@ -1,7 +1,7 @@
 export type MediaKind = 'VIDEO' | 'AUDIO' | 'IMAGE';
 
 /** What a library file is for; the library shows each purpose in its own section. */
-export type MediaPurpose = 'GENERAL' | 'SONG_AUDIO' | 'SONG_BACKGROUND' | 'BACKGROUND_MUSIC' | 'SOUND_EFFECT' | 'COVER';
+export type MediaPurpose = 'GENERAL' | 'SONG_AUDIO' | 'SONG_BACKGROUND' | 'BACKGROUND_MUSIC' | 'SOUND_EFFECT' | 'COVER' | 'MISC' | 'MUSICAL_MESSAGE';
 
 export interface MediaAsset {
   id: string;

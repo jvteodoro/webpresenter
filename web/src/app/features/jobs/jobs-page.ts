@@ -15,6 +15,8 @@ import { ImportDialog, ImportDialogData } from './import-dialog';
 
 const SECTION_BY_TARGET: Record<ImportTarget, string> = {
   BACKGROUND_MUSIC: '/biblioteca/fundos',
+  MISC: '/biblioteca/diversos',
+  MUSICAL_MESSAGE: '/biblioteca/mensagens',
   SOUND_EFFECT: '/biblioteca/efeitos',
   MEDIA: '/biblioteca/midia',
   SONG: '/musicas',

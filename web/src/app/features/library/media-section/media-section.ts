@@ -21,6 +21,7 @@ import { ConfirmDialog, ConfirmDialogData } from '../../../shared/dialogs/confir
 import { TextPromptDialog, TextPromptDialogData } from '../../../shared/dialogs/text-prompt-dialog';
 import { MediaPreviewDialog } from '../media-preview-dialog/media-preview-dialog';
 import { MediaTable } from '../media-table/media-table';
+import { VideoSourcesDialog } from '../video-sources/video-sources-dialog';
 import { MediaUpload } from '../media-upload/media-upload';
 
 const DEFAULT_HINT = 'Arraste vídeos, áudios ou imagens para cá';
@@ -55,6 +56,8 @@ export class MediaSection {
   readonly kindFilter = input(true, { transform: (v: boolean | undefined) => v ?? true });
   /** Route data: destination of "Importar do YouTube" in this section (none: no button). */
   readonly importTarget = input<ImportTarget | undefined>(undefined);
+  /** Route data: the section offers the recurring-video channels (a video per event date). */
+  readonly videoSources = input(false, { transform: (v: boolean | undefined) => v ?? false });
 
   private readonly jobs = inject(JobsStream);
   /** Downloads into this section seen in progress; the list reloads when one finishes. */
@@ -103,6 +106,10 @@ export class MediaSection {
       this.purpose();
       untracked(() => this.reload());
     });
+  }
+
+  protected openVideoSources(): void {
+    this.dialog.open(VideoSourcesDialog, { width: '44rem', maxWidth: '94vw' });
   }
 
   protected reload(): void {

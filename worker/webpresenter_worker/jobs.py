@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 from urllib.parse import urlsplit, urlunsplit
@@ -109,6 +110,89 @@ def js_runtimes() -> dict[str, dict]:
     return runtimes
 
 
+def js_runtime_args() -> list[str]:
+    return [arg for name in js_runtimes() for arg in ("--js-runtimes", name)]
+
+
+# Channel pages (the home tab) and the videos of a channel are searched for a day's video.
+CHANNEL_PAGE = re.compile(r"^/(@[^/]+|channel/[^/]+|c/[^/]+|user/[^/]+)/?$")
+CHANNEL_SCAN = 40      # the most recent videos of the channel looked at by title
+UPLOAD_CHECKS = 8      # and, for the ones whose title does not name the day, their upload dates
+
+
+def channel_videos_url(url: str) -> str:
+    """A channel's home page becomes its videos tab; any other link is searched as it is."""
+    parts = urlsplit(url)
+    path = parts.path.rstrip("/")
+    if CHANNEL_PAGE.match(parts.path):
+        path += "/videos"
+    return urlunsplit((parts.scheme, parts.netloc, path, parts.query, ""))
+
+
+def date_in_text(text: str, day: date) -> bool:
+    """The day written in a title: 27/11/2026, 27/11/26, 27.11, 27-11-2026… (zeros optional)."""
+    # The year is optional, but another year after the day and month is not this day.
+    pattern = (rf"(?<!\d)0?{day.day}\s*[/.\-]\s*0?{day.month}"
+               rf"(?:\s*[/.\-]\s*(?:{day.year}|{day.year % 100:02d})(?!\d))?(?!\s*[/.\-]\s*\d)(?!\d)")
+    return re.search(pattern, text) is not None
+
+
+def find_channel_video(url: str, day: date, report: Reporter) -> str:
+    """
+    The link of the channel's video of a day: the most recent videos whose title names the day, then
+    the upload dates of the first few. Raises JobFailed when there is none (yet).
+    """
+    import yt_dlp
+
+    report.progress(3, "Procurando o vídeo do dia no canal")
+    options = yt_dlp.parse_options(["--quiet", "--no-warnings", "--skip-download", "--flat-playlist",
+                                    "--playlist-end", str(CHANNEL_SCAN), *js_runtime_args()]).ydl_opts
+    try:
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info(channel_videos_url(url), download=False) or {}
+            report.check()
+            entries = [e for e in info.get("entries") or [] if e] if info.get("_type") == "playlist" else [info]
+            entries = [e for e in entries if e.get("id")]
+            for entry in entries:
+                if date_in_text(entry.get("title") or "", day):
+                    return watch_url(entry["id"])
+            for entry in entries[:UPLOAD_CHECKS]:
+                report.check()
+                try:
+                    full = ydl.extract_info(watch_url(entry["id"]), download=False) or {}
+                except yt_dlp.utils.DownloadError:
+                    continue
+                if upload_day(full) == day:
+                    return watch_url(entry["id"])
+    except yt_dlp.utils.DownloadError as e:
+        if report.cancelled.is_set():
+            raise Cancelled() from e
+        first = str(e).replace("ERROR: ", "").splitlines()[0]
+        raise JobFailed(f"Não foi possível consultar o canal: {first}") from e
+    raise JobFailed(f"Nenhum vídeo de {day:%d/%m/%Y} neste canal ainda")
+
+
+def upload_day(info: dict) -> date | None:
+    """
+    The day a video was uploaded, in the local time of the event (WORKER_UTC_OFFSET_HOURS, default -3:
+    Brazil keeps no summer time). YouTube's upload_date is in UTC, so an evening upload would be a day late.
+    """
+    offset = timedelta(hours=float(os.environ.get("WORKER_UTC_OFFSET_HOURS", "-3")))
+    if info.get("timestamp"):
+        return datetime.fromtimestamp(info["timestamp"], tz=timezone(offset)).date()
+    if info.get("upload_date"):
+        return datetime.strptime(info["upload_date"], "%Y%m%d").date()
+    return None
+
+
+def watch_url(video_id: str) -> str:
+    return f"https://www.youtube.com/watch?v={video_id}"
+
+
+# Files yt-dlp writes while downloading (or leaves behind): never the result.
+PARTIAL_SUFFIXES = {".part", ".ytdl", ".temp", ".json", ".vtt", ".srt"}
+
+
 def youtube_import(job: JobRequest, workdir: Path, report: Reporter) -> Result:
     import yt_dlp
 
@@ -131,15 +215,24 @@ def youtube_import(job: JobRequest, workdir: Path, report: Reporter) -> Result:
             "-o", str(workdir / "%(id)s.%(ext)s")]
     for runtime in js_runtimes():
         args += ["--js-runtimes", runtime]
-    if video:
+    # A musical message is kept as its singer provided it: the best quality of the source, in its own
+    # container (merging streams only remuxes; audio is not converted).
+    as_provided = job.params.get("target") == "MUSICAL_MESSAGE"
+    if video and as_provided:
+        args += ["-f", "bv*+ba/b", "--merge-output-format", "mp4/mkv"]
+    elif video:
         args += ["-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b",
                  "--merge-output-format", "mp4"]
+    elif as_provided:
+        args += ["-f", "bestaudio/best"]
     else:
         args += ["-f", "bestaudio[ext=m4a]/bestaudio/best", "-x", "--audio-format", "m4a"]
     options = yt_dlp.parse_options(args).ydl_opts
     options["progress_hooks"] = [hook]
 
     report.progress(2, "Consultando o link")
+    if job.params.get("matchDate"):  # a channel: the video of that day
+        url = find_channel_video(url, date.fromisoformat(job.params["matchDate"]), report)
     try:
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -154,12 +247,18 @@ def youtube_import(job: JobRequest, workdir: Path, report: Reporter) -> Result:
 
     if info.get("_type") == "playlist":
         raise JobFailed("O link é de uma playlist; use o link de um vídeo")
-    ext = "mp4" if video else "m4a"
-    files = sorted(workdir.glob(f"*.{ext}"), key=lambda p: p.stat().st_size, reverse=True)
+    if as_provided:
+        # Whatever container the source had: the largest finished file of the download.
+        files = sorted((p for p in workdir.iterdir() if p.is_file() and p.suffix not in PARTIAL_SUFFIXES),
+                       key=lambda p: p.stat().st_size, reverse=True)
+        ext = files[0].suffix.lstrip(".") if files else ""
+    else:
+        ext = "mp4" if video else "m4a"
+        files = sorted(workdir.glob(f"*.{ext}"), key=lambda p: p.stat().st_size, reverse=True)
     if not files:
         raise JobFailed("O download terminou sem gerar um arquivo")
     title = info.get("title") or files[0].stem
-    return Result(files[0], safe_filename(title, ext), title)
+    return Result(files[0], safe_filename(title, ext or "bin"), title)
 
 
 # ---------------------------------------------------------------------- vocal separation
@@ -372,13 +471,24 @@ def transcribe_lyrics(job: JobRequest, workdir: Path, report: Reporter) -> Resul
     words = lyrics.recognize(str(audio), model, language, heard, job.params.get("title"))
     if not words:
         raise JobFailed("Nenhuma palavra reconhecida na gravação")
-    report.progress(94, "Montando os slides")
+    return lyrics_result(job, words, workdir, report)
 
+
+def lyrics_result(job: JobRequest, words: list, workdir: Path, report: Reporter) -> Result:
+    """
+    The lyrics.json of timed words (recognized, or read from a video): aligned to the song's slides
+    (params.slides) when it has them, otherwise transcribed into parts and slide cues.
+    """
+    from . import lyrics
+
+    language = job.params.get("language") or "pt"
+    report.progress(94, "Montando os slides")
     known = job.params.get("slides")
     if known:
         cues, matched = lyrics.align(known, words)
         if not cues:
-            raise JobFailed("A letra da música não foi encontrada na gravação")
+            raise JobFailed("A letra da música não foi encontrada no vídeo" if job.type == "VIDEO_LYRICS"
+                            else "A letra da música não foi encontrada na gravação")
         result = {"mode": "aligned", "cues": cues, "confidence": round(matched, 2), "language": language}
     else:
         parsed, cues = lyrics.build_lyrics(words)
@@ -386,6 +496,26 @@ def transcribe_lyrics(job: JobRequest, workdir: Path, report: Reporter) -> Resul
     target = workdir / "lyrics.json"
     target.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
     return Result(target, "lyrics.json")
+
+
+def video_lyrics(job: JobRequest, workdir: Path, report: Reporter) -> Result:
+    """
+    Lyrics and slide times read from the on-screen text of a video: frames are read (OCR), the lines
+    timed by when they first and last show, then handled like a transcription.
+    """
+    from . import video_text
+
+    if not job.input_url:
+        raise JobFailed("Trabalho sem arquivo de entrada")
+    source = workdir / "input"
+    report.progress(1, "Baixando o vídeo")
+    download(job.input_url, source, report, 1, 8, "Baixando o vídeo")
+    lines = video_text.read_lines(source, workdir, report, 9, 90)
+    report.check()
+    words = video_text.timed_words(lines)
+    if not words:
+        raise JobFailed("Nenhum texto legível encontrado no vídeo")
+    return lyrics_result(job, words, workdir, report)
 
 
 def _failure(code: int, tail: list[str]) -> str:
@@ -412,4 +542,5 @@ def _kill_on_cancel(process: subprocess.Popen, cancelled: threading.Event) -> No
 
 
 HANDLERS = {"YOUTUBE_IMPORT": youtube_import, "SEPARATE_PLAYBACK": separate_playback,
-            "TRANSCRIBE_LYRICS": transcribe_lyrics, "SEPARATE_VOICES": separate_voices}
+            "TRANSCRIBE_LYRICS": transcribe_lyrics, "SEPARATE_VOICES": separate_voices,
+            "VIDEO_LYRICS": video_lyrics}

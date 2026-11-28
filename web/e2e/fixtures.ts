@@ -9,6 +9,8 @@ export type DevUser = 'admin' | 'tecnico' | 'lider' | 'musico';
 
 const HEADINGS: Record<string, string> = {
   '/biblioteca/midia': 'Biblioteca',
+  '/biblioteca/diversos': 'Biblioteca',
+  '/biblioteca/mensagens': 'Biblioteca',
   '/eventos': 'Eventos',
   '/dispositivos': 'Dispositivos',
 };

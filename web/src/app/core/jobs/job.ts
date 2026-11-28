@@ -1,6 +1,6 @@
-export type JobType = 'YOUTUBE_IMPORT' | 'SEPARATE_PLAYBACK' | 'TRANSCRIBE_LYRICS' | 'SEPARATE_VOICES';
+export type JobType = 'YOUTUBE_IMPORT' | 'SEPARATE_PLAYBACK' | 'TRANSCRIBE_LYRICS' | 'SEPARATE_VOICES' | 'VIDEO_LYRICS';
 export type JobStatus = 'QUEUED' | 'RUNNING' | 'DONE' | 'FAILED' | 'CANCELLED';
-export type ImportTarget = 'MEDIA' | 'BACKGROUND_MUSIC' | 'SOUND_EFFECT' | 'SONG';
+export type ImportTarget = 'MEDIA' | 'BACKGROUND_MUSIC' | 'SOUND_EFFECT' | 'SONG' | 'MISC' | 'MUSICAL_MESSAGE';
 export type ImportFormat = 'AUDIO' | 'VIDEO';
 
 export interface Job {
@@ -34,6 +34,7 @@ export const JOB_TYPE_ICONS: Record<JobType, string> = {
   SEPARATE_PLAYBACK: 'graphic_eq',
   TRANSCRIBE_LYRICS: 'subtitles',
   SEPARATE_VOICES: 'groups',
+  VIDEO_LYRICS: 'ondemand_video',
 };
 
 export const IMPORT_TARGET_LABELS: Record<ImportTarget, string> = {
@@ -41,6 +42,8 @@ export const IMPORT_TARGET_LABELS: Record<ImportTarget, string> = {
   BACKGROUND_MUSIC: 'Fundo musical',
   SOUND_EFFECT: 'Efeito sonoro',
   SONG: 'Nova música',
+  MISC: 'Diversos',
+  MUSICAL_MESSAGE: 'Mensagem musical',
 };
 
 export function isActive(job: Job): boolean {

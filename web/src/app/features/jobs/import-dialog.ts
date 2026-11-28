@@ -67,7 +67,7 @@ export class ImportDialog {
   private readonly ref = inject(MatDialogRef<ImportDialog, Job>);
   private readonly data = inject<ImportDialogData | null>(MAT_DIALOG_DATA, { optional: true });
 
-  protected readonly targets: ImportTarget[] = ['BACKGROUND_MUSIC', 'SOUND_EFFECT', 'MEDIA', 'SONG'];
+  protected readonly targets: ImportTarget[] = ['BACKGROUND_MUSIC', 'SOUND_EFFECT', 'MEDIA', 'MISC', 'MUSICAL_MESSAGE', 'SONG'];
   protected readonly targetLabels = IMPORT_TARGET_LABELS;
   protected url = '';
   protected target: ImportTarget = this.data?.target ?? 'BACKGROUND_MUSIC';

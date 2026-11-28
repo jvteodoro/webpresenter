@@ -41,6 +41,12 @@ class PlanningService implements PlannedEvents, MediaUsage {
         return all;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<Instant> startsBetween(Instant from, Instant to) {
+        return repository.findStartsBetween(from, to);
+    }
+
     @Transactional(readOnly = true)
     PlannedEvent get(UUID id) {
         return loaded(find(id));

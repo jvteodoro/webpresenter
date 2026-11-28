@@ -11,6 +11,9 @@ public interface PlannedEvents {
     /** The event players must be prepared for, if any. */
     Optional<EventPlan> current();
 
+    /** Start times of the events starting in {@code [from, to)}, earliest first. */
+    List<java.time.Instant> startsBetween(java.time.Instant from, java.time.Instant to);
+
     /**
      * An event as players need it: ordered items with media ids or slide text. Scene markers are
      * not items here; each item carries its scene and its effective background music.

@@ -89,6 +89,18 @@ class JobController {
     /** @param fresh transcribe again, replacing lyrics the song already has (default: align them) */
     record TranscribeRequest(@NotNull UUID songId, @NotNull UUID recordingId, Boolean fresh) {}
 
+    /** Lyrics and slide times read from the on-screen text of a video of the recording. */
+    @PostMapping("/extract-lyrics-from-video")
+    @PreAuthorize(CAN_MANAGE)
+    @ResponseStatus(HttpStatus.CREATED)
+    JobView extractLyricsFromVideo(@Valid @RequestBody VideoLyricsRequest request, Authentication user) {
+        return jobs.extractLyricsFromVideo(request.songId(), request.recordingId(), request.mediaId(),
+                Boolean.TRUE.equals(request.fresh()), user.getName());
+    }
+
+    /** @param fresh read the lyrics again, replacing the ones the song has (default: align them to its slides) */
+    record VideoLyricsRequest(@NotNull UUID songId, @NotNull UUID recordingId, @NotNull UUID mediaId, Boolean fresh) {}
+
     @PostMapping("/{id}/cancel")
     @PreAuthorize(CAN_MANAGE)
     JobView cancel(@PathVariable UUID id) {

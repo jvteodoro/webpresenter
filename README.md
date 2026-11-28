@@ -30,11 +30,10 @@ Documentation: [`docs/business.md`](docs/business.md), [`docs/architecture.md`](
 ## Development
 
 ```sh
-# 1. Infrastructure: PostgreSQL :5432, Keycloak :8180, SeaweedFS S3 :8333
-docker compose -f deploy/compose.yaml up -d
-
-# 2. Central server on :8090
-./gradlew :server:bootRun
+# 1-2. Infrastructure (PostgreSQL :5432, Keycloak :8180, SeaweedFS S3 :8333, RabbitMQ :5672)
+#      and the central server on :8090, in one command (Ctrl+C stops the server)
+scripts/start-server.sh
+# Options: --no-infra (infrastructure already running), --stop (stop the containers)
 
 # 3. Web app on :4200
 cd web && npm install && npm start
@@ -48,6 +47,20 @@ cd web && npm install && npm start
 1. **Biblioteca**: upload videos, audio and images.
 2. **Eventos**: create the event, add media and text slides, order them, then **Preparar nos players**.
 3. **Ao vivo**: control the outputs (→ / PageDown next, ← / PageUp previous, Esc rest screen, P pause).
+
+### Videos for the event (Diversos)
+
+The library's **Diversos** section holds videos for events. Two ways to fill it:
+
+- **Importar do YouTube** downloads one video into it.
+- **Vídeos recorrentes** adds a YouTube channel (its link, e.g. `https://www.youtube.com/@Canal`). For
+  each event in the next week, the video of its date is searched in the channel (a title naming the day,
+  e.g. `27/11/2026`, or an upload on that day) and downloaded, once it is published; a missing video is
+  searched again the next day. A date can also be downloaded at once from the same dialog.
+
+Lyrics from a video: on a sung recording of a song, **Ler a letra de um vídeo** reads the on-screen
+text of a video from the library (OCR of its frames) and times each line by when it shows. The
+recording must follow the video's timeline (the same performance, starting together).
 
 ### Running a MediaPlayer
 

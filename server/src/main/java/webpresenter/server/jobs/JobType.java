@@ -11,7 +11,12 @@ enum JobType {
     /** Lyrics (when the song has none) and slide times from a sung recording, with Whisper. */
     TRANSCRIBE_LYRICS,
     /** Separates the choir voices (soprano, alto, tenor, bass…) of a vocals track into STEM recordings. */
-    SEPARATE_VOICES;
+    SEPARATE_VOICES,
+    /**
+     * Reads the on-screen text of a video frame by frame (OCR) and times each line: the lyrics and slide
+     * times of a song whose video shows them.
+     */
+    VIDEO_LYRICS;
 
     /** Jobs that need a lot of computation (a GPU helps); see {@link JobDispatcher}. */
     boolean heavy() {

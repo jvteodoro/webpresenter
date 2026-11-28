@@ -5,10 +5,10 @@ FROM denoland/deno:bin-2.4.5 AS deno
 FROM python:3.12.12-slim-trixie
 ARG TORCH_INDEX=cpu
 
-# ffmpeg: conversions and Demucs input. Deno: the JavaScript runtime yt-dlp uses for YouTube's
-# challenges (Debian's Node.js is too old for it).
+# ffmpeg: conversions and Demucs input. Tesseract (Portuguese data): the text read from videos for lyrics.
+# Deno: the JavaScript runtime yt-dlp uses for YouTube's challenges (Debian's Node.js is too old for it).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+    && apt-get install -y --no-install-recommends ffmpeg ca-certificates tesseract-ocr tesseract-ocr-por \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=deno /deno /usr/local/bin/deno
 

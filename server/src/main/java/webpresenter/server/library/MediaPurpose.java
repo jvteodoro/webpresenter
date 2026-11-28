@@ -13,5 +13,9 @@ public enum MediaPurpose {
     /** Short sound used by timers and cues. */
     SOUND_EFFECT,
     /** Cover image of an album or playlist. */
-    COVER
+    COVER,
+    /** Videos for events downloaded from YouTube (e.g. a recurring show), kept apart from everyday media. */
+    MISC,
+    /** A singer's video or audio, played as it was provided (never converted). */
+    MUSICAL_MESSAGE
 }
